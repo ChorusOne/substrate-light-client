@@ -127,8 +127,9 @@ impl Decode for IBCDB {
 #[cfg(test)]
 mod tests {
     use crate::db::{IBCDB, create};
-    use kvdb::KeyValueDB;
     use parity_scale_codec::{Encode, Decode};
+    use std::io;
+    use kvdb::KeyValueDB;
 
     #[test]
     fn encode_decode() {
@@ -185,4 +186,173 @@ mod tests {
 
         assert_eq!(db.encode().as_slice(), decoded_db.encode().as_slice());
     }
+
+    #[test]
+    fn get_fails_with_non_existing_column() -> io::Result<()> {
+        let db = create(1);
+        assert!(db.get(1, &[]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn put_and_get() -> io::Result<()> {
+        let db = create(1);
+        let key1 = b"key1";
+
+        let mut transaction = db.transaction();
+        transaction.put(0, key1, b"horse");
+        db.write_buffered(transaction);
+        assert_eq!(&*db.get(0, key1)?.unwrap(), b"horse");
+        Ok(())
+    }
+
+    #[test]
+    fn delete_and_get() -> io::Result<()> {
+        let db = create(1);
+        let key1 = b"key1";
+
+        let mut transaction = db.transaction();
+        transaction.put(0, key1, b"horse");
+        db.write_buffered(transaction);
+        assert_eq!(&*db.get(0, key1)?.unwrap(), b"horse");
+
+        let mut transaction = db.transaction();
+        transaction.delete(0, key1);
+        db.write_buffered(transaction);
+        assert!(db.get(0, key1)?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn iter() -> io::Result<()> {
+        let db = create(1);
+        let key1 = b"key1";
+        let key2 = b"key2";
+
+        let mut transaction = db.transaction();
+        transaction.put(0, key1, key1);
+        transaction.put(0, key2, key2);
+        db.write_buffered(transaction);
+
+        let contents: Vec<_> = db.iter(0).into_iter().collect();
+        assert_eq!(contents.len(), 2);
+        assert_eq!(&*contents[0].0, key1);
+        assert_eq!(&*contents[0].1, key1);
+        assert_eq!(&*contents[1].0, key2);
+        assert_eq!(&*contents[1].1, key2);
+        Ok(())
+    }
+
+    #[test]
+    fn iter_from_prefix() -> io::Result<()> {
+        let db = create(1);
+        let key1 = b"0";
+        let key2 = b"ab";
+        let key3 = b"abc";
+        let key4 = b"abcd";
+
+        let mut batch = db.transaction();
+        batch.put(0, key1, key1);
+        batch.put(0, key2, key2);
+        batch.put(0, key3, key3);
+        batch.put(0, key4, key4);
+        db.write(batch)?;
+
+        // empty prefix
+        let contents: Vec<_> = db.iter_from_prefix(0, b"").into_iter().collect();
+        assert_eq!(contents.len(), 4);
+        assert_eq!(&*contents[0].0, key1);
+        assert_eq!(&*contents[1].0, key2);
+        assert_eq!(&*contents[2].0, key3);
+        assert_eq!(&*contents[3].0, key4);
+
+        // prefix a
+        let contents: Vec<_> = db.iter_from_prefix(0, b"a").into_iter().collect();
+        assert_eq!(contents.len(), 3);
+        assert_eq!(&*contents[0].0, key2);
+        assert_eq!(&*contents[1].0, key3);
+        assert_eq!(&*contents[2].0, key4);
+
+        // prefix abc
+        let contents: Vec<_> = db.iter_from_prefix(0, b"abc").into_iter().collect();
+        assert_eq!(contents.len(), 2);
+        assert_eq!(&*contents[0].0, key3);
+        assert_eq!(&*contents[1].0, key4);
+
+        // prefix abcde
+        let contents: Vec<_> = db.iter_from_prefix(0, b"abcde").into_iter().collect();
+        assert_eq!(contents.len(), 0);
+
+        // prefix 0
+        let contents: Vec<_> = db.iter_from_prefix(0, b"0").into_iter().collect();
+        assert_eq!(contents.len(), 1);
+        assert_eq!(&*contents[0].0, key1);
+        Ok(())
+    }
+
+    #[test]
+    fn complex() -> io::Result<()> {
+        let db = create(1);
+        let key1 = b"02c69be41d0b7e40352fc85be1cd65eb03d40ef8427a0ca4596b1ead9a00e9fc";
+        let key2 = b"03c69be41d0b7e40352fc85be1cd65eb03d40ef8427a0ca4596b1ead9a00e9fc";
+        let key3 = b"04c00000000b7e40352fc85be1cd65eb03d40ef8427a0ca4596b1ead9a00e9fc";
+        let key4 = b"04c01111110b7e40352fc85be1cd65eb03d40ef8427a0ca4596b1ead9a00e9fc";
+        let key5 = b"04c02222220b7e40352fc85be1cd65eb03d40ef8427a0ca4596b1ead9a00e9fc";
+
+        let mut batch = db.transaction();
+        batch.put(0, key1, b"cat");
+        batch.put(0, key2, b"dog");
+        batch.put(0, key3, b"caterpillar");
+        batch.put(0, key4, b"beef");
+        batch.put(0, key5, b"fish");
+        db.write(batch)?;
+
+        assert_eq!(&*db.get(0, key1)?.unwrap(), b"cat");
+
+        let contents: Vec<_> = db.iter(0).into_iter().collect();
+        assert_eq!(contents.len(), 5);
+        assert_eq!(contents[0].0.to_vec(), key1.to_vec());
+        assert_eq!(&*contents[0].1, b"cat");
+        assert_eq!(contents[1].0.to_vec(), key2.to_vec());
+        assert_eq!(&*contents[1].1, b"dog");
+
+        let mut prefix_iter = db.iter_from_prefix(0, b"04c0");
+        assert_eq!(*prefix_iter.next().unwrap().1, b"caterpillar"[..]);
+        assert_eq!(*prefix_iter.next().unwrap().1, b"beef"[..]);
+        assert_eq!(*prefix_iter.next().unwrap().1, b"fish"[..]);
+
+        let mut batch = db.transaction();
+        batch.delete(0, key1);
+        db.write(batch)?;
+
+        assert!(db.get(0, key1)?.is_none());
+
+        let mut batch = db.transaction();
+        batch.put(0, key1, b"cat");
+        db.write(batch)?;
+
+        let mut transaction = db.transaction();
+        transaction.put(0, key3, b"elephant");
+        transaction.delete(0, key1);
+        db.write(transaction)?;
+        assert!(db.get(0, key1)?.is_none());
+        assert_eq!(&*db.get(0, key3)?.unwrap(), b"elephant");
+
+        assert_eq!(&*db.get_by_prefix(0, key3).unwrap(), b"elephant");
+        assert_eq!(&*db.get_by_prefix(0, key2).unwrap(), b"dog");
+
+        let mut transaction = db.transaction();
+        transaction.put(0, key1, b"horse");
+        transaction.delete(0, key3);
+        db.write_buffered(transaction);
+        assert!(db.get(0, key3)?.is_none());
+        assert_eq!(&*db.get(0, key1)?.unwrap(), b"horse");
+
+        db.flush()?;
+        assert!(db.get(0, key3)?.is_none());
+        assert_eq!(&*db.get(0, key1)?.unwrap(), b"horse");
+        Ok(())
+    }
 }
+
+
