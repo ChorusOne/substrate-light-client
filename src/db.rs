@@ -66,7 +66,7 @@ impl KeyValueDB for IBCDB {
     fn iter<'a>(&'a self, col: u32) -> Box<dyn Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'a> {
         match self.columns.read().get(&col) {
             Some(map) => Box::new(
-                // TODO: worth optimizing at all?
+                // TODO: Maybe need to optimize
                 map.clone().into_iter().map(|(k, v)| (k.into_boxed_slice(), v.into_boxed_slice())),
             ),
             None => Box::new(None.into_iter()),
