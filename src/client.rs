@@ -92,52 +92,52 @@ impl<B, Block, RA, E> AuxStore for &Client<B, Block, RA, E> {
     }
 }
 
-impl<B, Block, RA, E> HeaderMetadata<Block> for Client<B, Block, RA, E> where Block: BlockT {
+impl<B, Block, RA, E> HeaderMetadata<Block> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
     /// Error used in case the header metadata is not found.
     type Error = sp_blockchain::Error;
 
     fn header_metadata(&self, hash: Block::Hash) -> Result<CachedHeaderMetadata<Block>, Self::Error> {
-        unimplemented!();
+        self.backend.blockchain().header_metadata(hash)
     }
 
-    fn insert_header_metadata(&self, hash: Block::Hash, header_metadata: CachedHeaderMetadata<Block>) {
-        unimplemented!();
+    fn insert_header_metadata(&self, hash: Block::Hash, metadata: CachedHeaderMetadata<Block>) {
+        self.backend.blockchain().insert_header_metadata(hash, metadata)
     }
 
 
     fn remove_header_metadata(&self, hash: Block::Hash) {
-        unimplemented!();
+        self.backend.blockchain().remove_header_metadata(hash)
     }
 }
 
-impl<B, Block, RA, E> HeaderBackend<Block> for Client<B, Block, RA, E> where Block: BlockT, RA: Sync + Send, B: Sync + Send, E: Sync + Send {
+impl<B, Block, RA, E> HeaderBackend<Block> for Client<B, Block, RA, E> where Block: BlockT, RA: Sync + Send, B: Sync + Send + Backend<Block>, E: Sync + Send {
     /// Get block header. Returns `None` if block is not found.
     fn header(&self, id: BlockId<Block>) -> BlockchainResult<Option<Block::Header>> {
-        unimplemented!();
+        self.backend.blockchain().header(id)
     }
 
     /// Get blockchain info.
     fn info(&self) -> Info<Block> {
-        unimplemented!();
+        self.backend.blockchain().info()
     }
 
     /// Get block status.
     fn status(&self, id: BlockId<Block>) -> BlockchainResult<BlockStatus> {
-        unimplemented!();
+        self.backend.blockchain().status(id)
     }
 
     /// Get block number by hash. Returns `None` if the header is not in the chain.
     fn number(&self, hash: Block::Hash) -> BlockchainResult<Option<<<Block as BlockT>::Header as HeaderT>::Number>> {
-        unimplemented!();
+        self.backend.blockchain().number(hash)
     }
 
     /// Get block hash by number. Returns `None` if the header is not in the chain.
     fn hash(&self, number: NumberFor<Block>) -> BlockchainResult<Option<Block::Hash>> {
-        unimplemented!();
+        self.backend.blockchain().hash(number)
     }
 }
 
-impl<B, Block, RA, E> HeaderBackend<Block> for &Client<B, Block, RA, E> where Block: BlockT, RA: Sync + Send, B: Sync + Send, E: Sync + Send {
+impl<B, Block, RA, E> HeaderBackend<Block> for &Client<B, Block, RA, E> where Block: BlockT, RA: Sync + Send, B: Sync + Send + Backend<Block>, E: Sync + Send {
     /// Get block header. Returns `None` if block is not found.
     fn header(&self, id: BlockId<Block>) -> BlockchainResult<Option<Block::Header>> {
         (**self).header(id)
@@ -229,6 +229,8 @@ impl<B, Block, RA, E> ExecutorProvider<Block> for Client<B, Block, RA, E> where 
     }
 }
 
+// Blockchain Events are not being fired while importing block.
+// So, no need to implement it.
 impl <B, Block, RA, E> BlockchainEvents<Block> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
     fn import_notification_stream(&self) -> ImportNotifications<Block> {
         unimplemented!()
