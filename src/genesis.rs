@@ -3,11 +3,13 @@ use parity_scale_codec::{Encode, Decode};
 use sc_finality_grandpa::GenesisAuthoritySetProvider;
 use sp_blockchain::Error;
 use sp_runtime::traits::Block as BlockT;
+use sc_consensus_babe::BabeConfiguration;
 
-#[derive(Encode, Decode, Default)]
+#[derive(Encode, Decode)]
 pub struct GenesisData {
     pub grandpa_authority_set: AuthorityList,
-    pub grandpa_authority_set_id: u64
+    pub grandpa_authority_set_id: u64,
+    pub babe_configuration: BabeConfiguration
 }
 
 pub struct GenesisGrandpaAuthoritySetProvider {
