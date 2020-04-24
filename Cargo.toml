@@ -33,6 +33,7 @@ sp-consensus-babe = "0.8.0-alpha.6"
 sp-inherents = "2.0.0-alpha.6"
 sp-storage = "2.0.0-alpha.6"
 sp-block-builder = "2.0.0-alpha.6"
+sp-finality-grandpa = "2.0.0-alpha.6"
 
 # Just to build on wasm
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }

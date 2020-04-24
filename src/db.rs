@@ -4,24 +4,31 @@ use kvdb::{DBValue, KeyValueDB, DBTransaction, DBOp};
 use std::io;
 use parity_util_mem::MallocSizeOf;
 use parking_lot::RwLock;
+use crate::genesis::GenesisData;
+
+#[derive(Encode, Decode)]
+pub struct IBCData {
+    pub db: DB,
+    pub genesis_data: GenesisData,
+}
 
 #[derive(Default, MallocSizeOf)]
-pub struct IBCDB {
+pub struct DB {
     columns: RwLock<HashMap<u32, BTreeMap<Vec<u8>, DBValue>>>
 }
 
 
-pub fn create(num_cols: u32) -> IBCDB {
+pub fn create(num_cols: u32) -> DB {
     let mut cols = HashMap::new();
 
     for idx in 0..num_cols {
         cols.insert(idx, BTreeMap::new());
     }
 
-    IBCDB { columns: RwLock::new(cols) }
+    DB { columns: RwLock::new(cols) }
 }
 
-impl KeyValueDB for IBCDB {
+impl KeyValueDB for DB {
     fn get(&self, col: u32, key: &[u8]) -> io::Result<Option<DBValue>> {
         let columns = self.columns.read();
         match columns.get(&col) {
@@ -94,7 +101,7 @@ impl KeyValueDB for IBCDB {
     }
 }
 
-impl Encode for IBCDB {
+impl Encode for DB {
     fn encode_to<T: Output>(&self, dest: &mut T) {
         let columns = self.columns.read();
         let column_length = columns.len() as u32;
@@ -106,11 +113,11 @@ impl Encode for IBCDB {
     }
 }
 
-impl Decode for IBCDB {
+impl Decode for DB {
     fn decode<I: Input>(value: &mut I) -> Result<Self, Error> {
         let length = u32::decode(value)?;
 
-        let mut ibcdb = IBCDB::default();
+        let mut ibcdb = DB::default();
         let mut map : HashMap<u32, BTreeMap<Vec<u8>, DBValue>> = HashMap::new();
 
         for i in 0..length {
@@ -126,13 +133,16 @@ impl Decode for IBCDB {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::{IBCDB, create};
+    use crate::db::{DB, create, IBCData};
     use parity_scale_codec::{Encode, Decode};
     use std::io;
     use kvdb::KeyValueDB;
+    use crate::genesis::GenesisData;
+    use sp_finality_grandpa::{AuthorityList, AuthorityId};
+    use sp_core::crypto::Public;
 
     #[test]
-    fn encode_decode() {
+    fn chain_storage_encode_decode() {
         let db = create(2);
         let mut transaction = db.transaction();
         transaction.put(0, b"key1", b"horse");
@@ -142,7 +152,7 @@ mod tests {
 
         let encoded_db = db.encode();
         assert!(encoded_db.len() > 0);
-        let decoded_db = IBCDB::decode(&mut encoded_db.as_slice()).unwrap();
+        let decoded_db = DB::decode(&mut encoded_db.as_slice()).unwrap();
 
         assert_eq!(decoded_db.get(0, b"key1").unwrap().unwrap(), b"horse");
         assert_eq!(decoded_db.get(1, b"key2").unwrap().unwrap(), b"pigeon");
@@ -150,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn deterministic_encode_decode() {
+    fn ibc_data_encode_decode() {
         let db = create(2);
         let mut transaction = db.transaction();
         transaction.put(0, b"key1", b"horse");
@@ -158,23 +168,53 @@ mod tests {
         transaction.put(1, b"key3", b"cat");
         assert!(db.write(transaction).is_ok());
 
-        // First test: If two IBCDB instance are identical, their
+        let ibc_data = IBCData {
+            db,
+            genesis_data: GenesisData{
+                grandpa_authority_set_id: 2,
+                grandpa_authority_set: vec![(AuthorityId::from_slice(&[1; 32]), 5)]
+            }
+        };
+
+        let encoded_ibc_data = ibc_data.encode();
+        assert!(encoded_ibc_data.len() > 0);
+        let decoded_ibc_data = IBCData::decode(&mut encoded_ibc_data.as_slice()).unwrap();
+        let decoded_db = decoded_ibc_data.db;
+
+        assert_eq!(decoded_db.get(0, b"key1").unwrap().unwrap(), b"horse");
+        assert_eq!(decoded_db.get(1, b"key2").unwrap().unwrap(), b"pigeon");
+        assert_eq!(decoded_db.get(1, b"key3").unwrap().unwrap(), b"cat");
+
+        assert_eq!(decoded_ibc_data.genesis_data.grandpa_authority_set_id, 2);
+        assert_eq!(decoded_ibc_data.genesis_data.grandpa_authority_set, vec![(AuthorityId::from_slice(&[1; 32]), 5)]);
+    }
+
+    #[test]
+    fn chain_storage_deterministic_encode_decode() {
+        let db = create(2);
+        let mut transaction = db.transaction();
+        transaction.put(0, b"key1", b"horse");
+        transaction.put(1, b"key2", b"pigeon");
+        transaction.put(1, b"key3", b"cat");
+        assert!(db.write(transaction).is_ok());
+
+        // First test: If two DB instance are identical, their
         // deserialization need to produce same binary data.
         for _i in 0..100 {
             // Serialization
             let encoded_db = db.encode();
             assert!(encoded_db.len() > 0);
             // Deserialization
-            let decoded_db = IBCDB::decode(&mut encoded_db.as_slice()).unwrap();
+            let decoded_db = DB::decode(&mut encoded_db.as_slice()).unwrap();
             // Deserialization need to produce same data every time
             assert_eq!(encoded_db.as_slice(), decoded_db.encode().as_slice());
         }
 
-        // Second test: If two instances of IBCDB are created from same binary blob,
+        // Second test: If two instances of DBs are created from same binary blob,
         // and if we insert same data on both instance, then
         // both instance should produce same binary blob
         let encoded_db = db.encode();
-        let decoded_db = IBCDB::decode(&mut encoded_db.as_slice()).unwrap();
+        let decoded_db = DB::decode(&mut encoded_db.as_slice()).unwrap();
 
         let mut transaction = db.transaction();
         transaction.put(0, b"another_format", b"pikachu");
@@ -188,14 +228,65 @@ mod tests {
     }
 
     #[test]
-    fn get_fails_with_non_existing_column() -> io::Result<()> {
+    fn ibc_data_deterministic_encode_decode() {
+        let db = create(2);
+        let mut transaction = db.transaction();
+        transaction.put(0, b"key1", b"horse");
+        transaction.put(1, b"key2", b"pigeon");
+        transaction.put(1, b"key3", b"cat");
+        assert!(db.write(transaction).is_ok());
+
+        let mut ibc_data = IBCData {
+            db,
+            genesis_data: GenesisData{
+                grandpa_authority_set_id: 2,
+                grandpa_authority_set: vec![(AuthorityId::from_slice(&[1; 32]), 5)]
+            }
+        };
+
+        // First test: If two IBCData instance are identical, their
+        // deserialization need to produce same binary data.
+        for _i in 0..100 {
+            // Serialization
+            let encoded_ibc_data = ibc_data.encode();
+            assert!(encoded_ibc_data.len() > 0);
+            // Deserialization
+            let decoded_ibc_data = IBCData::decode(&mut encoded_ibc_data.as_slice()).unwrap();
+            // Deserialization need to produce same data every time
+            assert_eq!(encoded_ibc_data.as_slice(), decoded_ibc_data.encode().as_slice());
+        }
+
+        // Second test: If two instances of DBs are created from same binary blob,
+        // and if we insert same data on both instance, then
+        // both instance should produce same binary blob
+        let encoded_ibc_data = ibc_data.encode();
+        let mut decoded_ibc_data = IBCData::decode(&mut encoded_ibc_data.as_slice()).unwrap();
+
+        let mut transaction = ibc_data.db.transaction();
+        transaction.put(0, b"another_format", b"pikachu");
+        let duplicate_transaction = transaction.clone();
+        // Insert into original db
+        assert!(ibc_data.db.write(transaction).is_ok());
+        ibc_data.genesis_data.grandpa_authority_set = vec![(AuthorityId::from_slice(&[5; 32]), 5), (AuthorityId::from_slice(&[2; 32]), 45)];
+        ibc_data.genesis_data.grandpa_authority_set_id = 521;
+
+        // Insert into an instance created from previous state of original db
+        assert!(decoded_ibc_data.db.write(duplicate_transaction).is_ok());
+        decoded_ibc_data.genesis_data.grandpa_authority_set = vec![(AuthorityId::from_slice(&[5; 32]), 5), (AuthorityId::from_slice(&[2; 32]), 45)];
+        decoded_ibc_data.genesis_data.grandpa_authority_set_id = 521;
+
+        assert_eq!(ibc_data.encode().as_slice(), decoded_ibc_data.encode().as_slice());
+    }
+
+    #[test]
+    fn chain_storage_get_fails_with_non_existing_column() -> io::Result<()> {
         let db = create(1);
         assert!(db.get(1, &[]).is_err());
         Ok(())
     }
 
     #[test]
-    fn put_and_get() -> io::Result<()> {
+    fn chain_storage_put_and_get() -> io::Result<()> {
         let db = create(1);
         let key1 = b"key1";
 
@@ -207,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_and_get() -> io::Result<()> {
+    fn chain_storage_delete_and_get() -> io::Result<()> {
         let db = create(1);
         let key1 = b"key1";
 
@@ -224,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn iter() -> io::Result<()> {
+    fn chain_storage_iter() -> io::Result<()> {
         let db = create(1);
         let key1 = b"key1";
         let key2 = b"key2";
@@ -244,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn iter_from_prefix() -> io::Result<()> {
+    fn chain_storage_iter_from_prefix() -> io::Result<()> {
         let db = create(1);
         let key1 = b"0";
         let key2 = b"ab";
@@ -291,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    fn complex() -> io::Result<()> {
+    fn chain_storage_complex() -> io::Result<()> {
         let db = create(1);
         let key1 = b"02c69be41d0b7e40352fc85be1cd65eb03d40ef8427a0ca4596b1ead9a00e9fc";
         let key2 = b"03c69be41d0b7e40352fc85be1cd65eb03d40ef8427a0ca4596b1ead9a00e9fc";

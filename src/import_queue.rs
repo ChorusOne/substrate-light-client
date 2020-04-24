@@ -17,16 +17,13 @@ use std::error::Error;
 
 // TODO: Clean this up and abstract away some parts
 pub fn setup_import_queue(encoded_data: Vec<u8>)  {
-    let db = match encoded_data.len() {
-        0 => db::create(1),
-        _ => db::IBCDB::decode(&mut encoded_data.as_slice()).unwrap()
-    };
+    let ibc_data = db::IBCData::decode(&mut encoded_data.as_slice()).unwrap();
 
     let light_storage = LightStorage::new(DatabaseSettings{
         state_cache_size: 2048,
         state_cache_child_ratio: Some((20, 100)),
         pruning: PruningMode::keep_blocks(256),
-        source: DatabaseSettingsSrc::Custom(Arc::new(db))
+        source: DatabaseSettingsSrc::Custom(Arc::new(ibc_data.db))
     }).unwrap();
 
     let light_blockchain = sc_client::light::new_light_blockchain(light_storage);

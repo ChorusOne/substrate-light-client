@@ -3,6 +3,7 @@ mod import_queue;
 mod dummy_objs;
 mod client;
 mod types;
+mod genesis;
 
 use sp_runtime::traits::{Block as BlockT};
 
