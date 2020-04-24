@@ -14,10 +14,12 @@ use sc_finality_grandpa as grandpa;
 use sc_network::config::OnDemand;
 use sp_inherents::InherentDataProviders;
 use std::error::Error;
+use crate::genesis::GenesisGrandpaAuthoritySetProvider;
 
 // TODO: Clean this up and abstract away some parts
 pub fn setup_import_queue(encoded_data: Vec<u8>)  {
     let ibc_data = db::IBCData::decode(&mut encoded_data.as_slice()).unwrap();
+    let grandpa_genesis_authority_set_provider = GenesisGrandpaAuthoritySetProvider::new(&ibc_data.genesis_data);
 
     let light_storage = LightStorage::new(DatabaseSettings{
         state_cache_size: 2048,
@@ -70,7 +72,7 @@ pub fn setup_import_queue(encoded_data: Vec<u8>)  {
     let grandpa_block_import = grandpa::light_block_import(
         client.clone(),
         backend,
-        &(client.clone() as Arc<_>),
+        &grandpa_genesis_authority_set_provider,
         Arc::new(fetch_checker),
     ).unwrap();
 
