@@ -11,9 +11,16 @@ use sc_finality_grandpa as grandpa;
 use sc_network::config::OnDemand;
 use sp_inherents::InherentDataProviders;
 use crate::genesis::GenesisGrandpaAuthoritySetProvider;
+use sc_consensus_babe::BabeImportQueue;
+use sp_runtime::traits::BlakeTwo256;
+use sp_api::TransactionFor;
+use crate::client::Client;
+use sc_client::light::backend::Backend;
+use crate::runtime::RuntimeApiConstructor;
 
 // TODO: Clean this up and abstract away some parts
-pub fn setup_import_queue(encoded_data: Vec<u8>)  {
+pub fn setup_import_queue(encoded_data: Vec<u8>)
+    -> BabeImportQueue<Block, TransactionFor<Client<Backend<LightStorage<Block>, BlakeTwo256>, Block, RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>, Block>>  {
     let ibc_data = db::IBCData::decode(&mut encoded_data.as_slice()).unwrap();
     let grandpa_genesis_authority_set_provider = GenesisGrandpaAuthoritySetProvider::new(&ibc_data.genesis_data);
 
@@ -46,7 +53,7 @@ pub fn setup_import_queue(encoded_data: Vec<u8>)  {
     );
 
     // Custom Client implementation without runtime
-    let client: Arc<crate::client::Client<_, _, crate::runtime::RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>> = Arc::new(crate::client::Client{
+    let client: Arc<Client<_, _, RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>> = Arc::new(Client{
         backend: backend.clone(),
         _phantom: PhantomData,
         _phantom2: PhantomData,
@@ -83,7 +90,7 @@ pub fn setup_import_queue(encoded_data: Vec<u8>)  {
 
     let inherent_data_providers = InherentDataProviders::new();
 
-    let import_queue = sc_consensus_babe::import_queue(
+    return sc_consensus_babe::import_queue(
         babe_link,
         babe_block_import,
         None,
@@ -112,7 +119,7 @@ mod tests {
     use sp_runtime::generic::BlockId;
     use std::ops::{Deref, DerefMut};
     use crate::client::Client;
-    use sp_runtime::traits::{Block as BlockT, Zero};
+    use sp_runtime::traits::{Block as BlockT, Zero, BlakeTwo256};
     use sp_consensus::BlockImport;
     use sp_blockchain::{ProvideCache, HeaderBackend, HeaderMetadata};
     use sc_client_api::AuxStore;
@@ -154,7 +161,7 @@ mod tests {
         let backend = sc_client::light::new_light_backend(light_blockchain.clone());
 
 
-        let client: Arc<crate::client::Client<sc_client::light::backend::Backend<sc_client_db::light::LightStorage<Block>, sp_runtime::traits::BlakeTwo256>, Block, RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>> = Arc::new(crate::client::Client{
+        let client: Arc<Client<sc_client::light::backend::Backend<LightStorage<Block>, BlakeTwo256>, Block, RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>> = Arc::new(Client{
             backend: backend.clone(),
             _phantom: PhantomData,
             _phantom2: PhantomData,
@@ -168,7 +175,7 @@ mod tests {
 
     fn call_babe_configuration<Block: BlockT, Client>(
         client: Arc<Client>,
-    ) -> std::result::Result<sc_consensus_babe::BabeConfiguration, sp_blockchain::Error> where
+    ) -> std::result::Result<BabeConfiguration, sp_blockchain::Error> where
         Client: ProvideRuntimeApi<Block> + ProvideCache<Block> + Send + Sync + AuxStore + 'static,
         Client: HeaderBackend<Block> + HeaderMetadata<Block, Error = sp_blockchain::Error>,
         Client::Api: BabeApi<Block> + ApiExt<Block, Error = sp_blockchain::Error>,
