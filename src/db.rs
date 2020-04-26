@@ -1,9 +1,11 @@
-use parity_scale_codec::alloc::collections::{HashMap, BTreeMap};
-use parity_scale_codec::{Error, Input, Output, Encode, Decode};
-use kvdb::{DBValue, KeyValueDB, DBTransaction, DBOp};
 use std::io;
+
+use kvdb::{DBOp, DBTransaction, DBValue, KeyValueDB};
+use parity_scale_codec::{Decode, Encode, Error, Input, Output};
+use parity_scale_codec::alloc::collections::{BTreeMap, HashMap};
 use parity_util_mem::MallocSizeOf;
 use parking_lot::RwLock;
+
 use crate::genesis::GenesisData;
 
 #[derive(Encode, Decode)]
@@ -133,19 +135,20 @@ impl Decode for DB {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::{DB, create, IBCData};
-    use parity_scale_codec::{Encode, Decode};
     use std::io;
+
     use kvdb::KeyValueDB;
-    use crate::genesis::GenesisData;
-    use sp_finality_grandpa::{AuthorityList, AuthorityId};
-    use sp_core::crypto::Public;
+    use parity_scale_codec::{Decode, Encode};
+    use sc_consensus_babe::{AuthorityId as BabeAuthorityId, BabeConfiguration};
     use sc_consensus_babe::Config;
-    use sp_consensus_babe::BabeConfiguration;
-    use sp_consensus_babe::AuthorityId as BabeAuthorityId;
+    use sp_core::crypto::Public;
+    use sp_finality_grandpa::{AuthorityId, AuthorityList};
+
+    use crate::db::{create, DB, IBCData};
+    use crate::genesis::GenesisData;
 
     #[test]
-    fn chain_storage_encode_decode() {
+    fn db_encode_decode() {
         let db = create(2);
         let mut transaction = db.transaction();
         transaction.put(0, b"key1", b"horse");
@@ -201,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn chain_storage_deterministic_encode_decode() {
+    fn db_deterministic_encode_decode() {
         let db = create(2);
         let mut transaction = db.transaction();
         transaction.put(0, b"key1", b"horse");
@@ -302,14 +305,14 @@ mod tests {
     }
 
     #[test]
-    fn chain_storage_get_fails_with_non_existing_column() -> io::Result<()> {
+    fn db_get_fails_with_non_existing_column() -> io::Result<()> {
         let db = create(1);
         assert!(db.get(1, &[]).is_err());
         Ok(())
     }
 
     #[test]
-    fn chain_storage_put_and_get() -> io::Result<()> {
+    fn db_put_and_get() -> io::Result<()> {
         let db = create(1);
         let key1 = b"key1";
 
@@ -321,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn chain_storage_delete_and_get() -> io::Result<()> {
+    fn db_delete_and_get() -> io::Result<()> {
         let db = create(1);
         let key1 = b"key1";
 
@@ -338,7 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn chain_storage_iter() -> io::Result<()> {
+    fn db_iter() -> io::Result<()> {
         let db = create(1);
         let key1 = b"key1";
         let key2 = b"key2";
@@ -358,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn chain_storage_iter_from_prefix() -> io::Result<()> {
+    fn db_iter_from_prefix() -> io::Result<()> {
         let db = create(1);
         let key1 = b"0";
         let key2 = b"ab";
@@ -405,7 +408,7 @@ mod tests {
     }
 
     #[test]
-    fn chain_storage_complex() -> io::Result<()> {
+    fn db_complex() -> io::Result<()> {
         let db = create(1);
         let key1 = b"02c69be41d0b7e40352fc85be1cd65eb03d40ef8427a0ca4596b1ead9a00e9fc";
         let key2 = b"03c69be41d0b7e40352fc85be1cd65eb03d40ef8427a0ca4596b1ead9a00e9fc";

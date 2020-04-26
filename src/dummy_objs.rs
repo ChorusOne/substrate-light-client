@@ -1,32 +1,21 @@
-use sc_client::{CallExecutor, StorageProof, ExecutionStrategy};
-use std::cell::RefCell;
-use sp_runtime::generic::BlockId;
 use core::result;
-use std::panic::UnwindSafe;
-use sp_version::{NativeVersion, RuntimeVersion};
-use sp_state_machine::{ExecutionManager, InMemoryBackend};
-use sp_runtime::traits::{Block as BlockT, HashFor, NumberFor};
-use sp_api::{Core, NativeOrEncoded, InitializeBlock, StorageTransactionCache, ProofRecorder, ConstructRuntimeApi, ApiRef, CallApiAt, ApiExt, ApiErrorExt, RuntimeApiInfo, StorageChanges, OverlayedChanges, ChangesTrieState};
-use sp_externalities::{Extensions, Externalities};
-use sc_client_api::light::Storage as LightStorage;
-use sp_blockchain::Error;
+use std::cell::RefCell;
 use std::marker::PhantomData;
+use std::panic::UnwindSafe;
+
+use futures_task::{FutureObj, Spawn, SpawnError};
 use parity_scale_codec::{Decode, Encode};
-use sp_core::traits::{CodeExecutor, RuntimeCode, CallInWasm, CloneableSpawn};
+use sc_client::{CallExecutor, ExecutionStrategy, StorageProof};
+use sc_client_api::light::Storage as LightStorage;
+use sp_api::{InitializeBlock, NativeOrEncoded, OverlayedChanges, ProofRecorder, StorageTransactionCache};
+use sp_blockchain::Error;
+use sp_core::traits::{CallInWasm, CloneableSpawn, CodeExecutor, RuntimeCode};
+use sp_externalities::{Extensions, Externalities};
 use sp_runtime::codec;
-use sp_block_builder::BlockBuilder;
-use futures_task::{Spawn, SpawnError, FutureObj};
-use sp_consensus_babe::BabeApi;
-
-/**
-  fn BlockBuilder_apply_extrinsic_runtime_api_impl(&self, _: &sp_runtime::generic::block::BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<<Block as sp_runtime::traits::Block>::Extrinsic>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<std::result::Result<std::result::Result<(), sp_runtime::DispatchError>, sp_runtime::transaction_validity::TransactionValidityError>>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-  fn BlockBuilder_finalize_block_runtime_api_impl(&self, _: &sp_runtime::generic::block::BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<()>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<<Block as sp_runtime::traits::Block>::Header>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-  fn BlockBuilder_inherent_extrinsics_runtime_api_impl(&self, _: &sp_runtime::generic::block::BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<sp_inherents::InherentData>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<std::vec::Vec<<Block as sp_runtime::traits::Block>::Extrinsic>>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-  fn BlockBuilder_check_inherents_runtime_api_impl(&self, _: &sp_runtime::generic::block::BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<(Block, sp_inherents::InherentData)>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<sp_inherents::CheckInherentsResult>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-  fn BlockBuilder_random_seed_runtime_api_impl(&self, _: &sp_runtime::generic::block::BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<()>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<<Block as sp_runtime::traits::Block>::Hash>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-
-**/
-
+use sp_runtime::generic::BlockId;
+use sp_runtime::traits::{Block as BlockT, HashFor};
+use sp_state_machine::ExecutionManager;
+use sp_version::{NativeVersion, RuntimeVersion};
 
 pub struct DummySpawnHandle {
 
@@ -43,74 +32,6 @@ impl CloneableSpawn for DummySpawnHandle{
         Box::new(DummySpawnHandle{})
     }
 }
-
-pub struct DummyApiExt {
-
-}
-
-impl ApiErrorExt for DummyApiExt {
-    type Error = Error;
-}
-
-impl<Block> ApiExt<Block> for DummyApiExt where Block: BlockT {
-    type StateBackend = InMemoryBackend<HashFor<Block>>;
-
-    fn map_api_result<F: FnOnce(&Self) -> result::Result<R, E>, R, E>(&self, map_call: F) -> Result<R, E> where Self: Sized {
-        unimplemented!()
-    }
-
-    fn has_api<A: RuntimeApiInfo + ?Sized>(&self, at: &BlockId<Block>) -> Result<bool, Self::Error> where Self: Sized {
-        unimplemented!()
-    }
-
-    fn has_api_with<A: RuntimeApiInfo + ?Sized, P: Fn(u32) -> bool>(&self, at: &BlockId<Block>, pred: P) -> Result<bool, Self::Error> where Self: Sized {
-        unimplemented!()
-    }
-
-    fn record_proof(&mut self) {
-        unimplemented!()
-    }
-
-    fn extract_proof(&mut self) -> Option<StorageProof> {
-        unimplemented!()
-    }
-
-    fn into_storage_changes(&self, backend: &Self::StateBackend, changes_trie_state: Option<&ChangesTrieState<HashFor<Block>, NumberFor<Block>>>, parent_hash: <Block as BlockT>::Hash) -> Result<StorageChanges<Self::StateBackend, Block>, String> where Self: Sized {
-        unimplemented!()
-    }
-}
-
-impl<Block> BabeApi<Block> for DummyApiExt where Block: BlockT {
-    fn BabeApi_configuration_runtime_api_impl(&self, _: &BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<()>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<sp_consensus_babe::BabeConfiguration>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-    fn BabeApi_current_epoch_start_runtime_api_impl(&self, _: &BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<()>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<u64>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-}
-
-impl<Block> Core<Block> for DummyApiExt where Block: BlockT {
-    fn Core_version_runtime_api_impl(&self, _: &BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<()>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<sp_version::RuntimeVersion>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-    fn Core_execute_block_runtime_api_impl(&self, _: &BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<Block>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<()>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-    fn Core_initialize_block_runtime_api_impl(&self, _: &BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<&<Block as sp_runtime::traits::Block>::Header>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<()>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-}
-
-impl<Block> BlockBuilder<Block> for DummyApiExt where Block: BlockT {
-    fn BlockBuilder_apply_extrinsic_runtime_api_impl(&self, _: &BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<<Block as sp_runtime::traits::Block>::Extrinsic>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<std::result::Result<std::result::Result<(), sp_runtime::DispatchError>, sp_runtime::transaction_validity::TransactionValidityError>>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-    fn BlockBuilder_finalize_block_runtime_api_impl(&self, _: &BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<()>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<<Block as sp_runtime::traits::Block>::Header>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-    fn BlockBuilder_inherent_extrinsics_runtime_api_impl(&self, _: &BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<sp_inherents::InherentData>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<std::vec::Vec<<Block as sp_runtime::traits::Block>::Extrinsic>>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-    fn BlockBuilder_check_inherents_runtime_api_impl(&self, _: &BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<(Block, sp_inherents::InherentData)>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<sp_inherents::CheckInherentsResult>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-    fn BlockBuilder_random_seed_runtime_api_impl(&self, _: &BlockId<Block>, _: sp_core::ExecutionContext, _: std::option::Option<()>, _: std::vec::Vec<u8>) -> std::result::Result<sp_core::NativeOrEncoded<<Block as sp_runtime::traits::Block>::Hash>, <Self as sp_api::ApiErrorExt>::Error> { unimplemented!() }
-}
-
-pub struct DummyConstructRuntimeApi {
-
-}
-
-impl<Block, C> ConstructRuntimeApi<Block, C> for DummyConstructRuntimeApi where Block: BlockT, C: CallApiAt<Block> {
-    type RuntimeApi = DummyApiExt;
-
-    fn construct_runtime_api(call: &C) -> ApiRef<Self::RuntimeApi> {
-        unimplemented!()
-    }
-}
-
 
 pub struct DummyCallExecutor<B: BlockT, Storage: LightStorage<B>>{
     pub _phantom: PhantomData<B>,

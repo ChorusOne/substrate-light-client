@@ -1,24 +1,27 @@
-use sc_client_api::backend::{LockImportRun, Finalizer, AuxStore};
-use sp_blockchain::{Error, HeaderMetadata, CachedHeaderMetadata, HeaderBackend, BlockStatus, Result as BlockchainResult, Info, ProvideCache, Cache};
-use sc_client_api::{ClientImportOperation, Backend, TransactionFor, call_executor::ExecutorProvider, CallExecutor, BlockchainEvents, ImportNotifications, FinalityNotifications, StorageEventStream};
-use sp_api::{ProvideRuntimeApi, ApiRef, ConstructRuntimeApi, CallApiAt, CallApiAtParams};
-use sp_runtime::generic::BlockId;
-use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
-use parity_scale_codec::alloc::sync::Arc;
 use std::marker::PhantomData;
-use sp_core::NativeOrEncoded;
-use sp_version::RuntimeVersion;
-use parity_scale_codec::{Encode, Decode};
 use std::panic::UnwindSafe;
-use sp_api::Core;
-use sp_consensus::{BlockImport, BlockCheckParams, ImportResult, BlockImportParams, Error as ConsensusError};
+
+use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec::alloc::collections::hash_map::RandomState;
 use parity_scale_codec::alloc::collections::HashMap;
+use parity_scale_codec::alloc::sync::Arc;
+use sc_client_api::{Backend, BlockchainEvents, call_executor::ExecutorProvider, CallExecutor, ClientImportOperation, FinalityNotifications, ImportNotifications, StorageEventStream, TransactionFor};
+use sc_client_api::backend::{AuxStore, Finalizer, LockImportRun};
 use sc_client_api::execution_extensions::ExecutionExtensions;
+use sc_consensus_babe::BabeConfiguration;
+use sp_api::{ApiRef, CallApiAt, CallApiAtParams, ConstructRuntimeApi, ProvideRuntimeApi};
+use sp_api::Core;
+use sp_blockchain::{BlockStatus, Cache, CachedHeaderMetadata, Error, HeaderBackend, HeaderMetadata, Info, ProvideCache, Result as BlockchainResult};
+use sp_consensus::{BlockCheckParams, BlockImport, BlockImportParams, Error as ConsensusError, ImportResult};
+use sp_core::NativeOrEncoded;
+use sp_runtime::generic::BlockId;
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 use sp_storage::StorageKey;
+use sp_version::RuntimeVersion;
 
 pub struct Client<B, Block, RA, E> {
     pub backend: Arc<B>,
+    pub babe_configuration: BabeConfiguration,
     pub _phantom: PhantomData<RA>,
     pub _phantom2: PhantomData<Block>,
     pub _phantom3: PhantomData<E>
@@ -177,7 +180,12 @@ impl<B, Block, RA, E> CallApiAt<Block> for Client<B, Block, RA, E> where Block: 
     type StateBackend = B::State;
 
     fn call_api_at<R: Encode + Decode + PartialEq, NC: FnOnce() -> std::result::Result<R, String> + UnwindSafe, C: Core<Block, Error=Self::Error>>(&self, params: CallApiAtParams<Block, C, NC, Self::StateBackend>) -> Result<NativeOrEncoded<R>, Self::Error> {
-        unimplemented!()
+        match params.function {
+            "genesis_config" => {
+                Ok(NativeOrEncoded::Encoded(self.babe_configuration.encode()))
+            },
+            _ => unimplemented!()
+        }
     }
 
     fn runtime_version_at(&self, at: &BlockId<Block>) -> Result<RuntimeVersion, Self::Error> {

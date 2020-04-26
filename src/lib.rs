@@ -4,6 +4,7 @@ mod dummy_objs;
 mod client;
 mod types;
 mod genesis;
+mod runtime;
 
 use sp_runtime::traits::{Block as BlockT};
 
