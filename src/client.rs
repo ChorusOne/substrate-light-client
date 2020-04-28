@@ -5,7 +5,7 @@ use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec::alloc::collections::hash_map::RandomState;
 use parity_scale_codec::alloc::collections::HashMap;
 use parity_scale_codec::alloc::sync::Arc;
-use sc_client_api::{Backend, BlockchainEvents, call_executor::ExecutorProvider, CallExecutor, ClientImportOperation, FinalityNotifications, ImportNotifications, StorageEventStream, TransactionFor};
+use sc_client_api::{Backend, BlockchainEvents, call_executor::ExecutorProvider, CallExecutor, ClientImportOperation, FinalityNotifications, ImportNotifications, StorageEventStream, TransactionFor, backend};
 use sc_client_api::backend::{AuxStore, Finalizer, LockImportRun};
 use sc_client_api::execution_extensions::ExecutionExtensions;
 use sc_consensus_babe::BabeConfiguration;
@@ -18,6 +18,7 @@ use sp_runtime::generic::BlockId;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 use sp_storage::StorageKey;
 use sp_version::RuntimeVersion;
+use sc_client::apply_aux;
 
 pub struct Client<B, Block, RA, E> {
     pub backend: Arc<B>,
@@ -29,7 +30,21 @@ pub struct Client<B, Block, RA, E> {
 
 impl<B, Block, RA, E> Clone for Client<B, Block, RA, E> {
     fn clone(&self) -> Self {
-        unimplemented!()
+        Self {
+            backend: self.backend.clone(),
+            babe_configuration: self.babe_configuration.clone(),
+            _phantom: self._phantom.clone(),
+            _phantom2: self._phantom2.clone(),
+            _phantom3: self._phantom3.clone()
+        }
+    }
+}
+
+impl<B, Block, RA, E> LockImportRun<Block, B> for &Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
+    fn lock_import_and_run<R, Err, F>(&self, f: F) -> Result<R, Err> where
+        F: FnOnce(&mut ClientImportOperation<Block, B>) -> Result<R, Err>,
+        Err: From<sp_blockchain::Error> {
+        (**self).lock_import_and_run(f)
     }
 }
 
@@ -37,7 +52,24 @@ impl<B, Block, RA, E> LockImportRun<Block, B> for Client<B, Block, RA, E> where 
     fn lock_import_and_run<R, Err, F>(&self, f: F) -> Result<R, Err> where
         F: FnOnce(&mut ClientImportOperation<Block, B>) -> Result<R, Err>,
         Err: From<sp_blockchain::Error> {
-        unimplemented!()
+        let inner = || {
+            let _import_lock = self.backend.get_import_lock().write();
+
+            let mut op = ClientImportOperation {
+                op: self.backend.begin_operation()?,
+                notify_imported: None,
+                notify_finalized: Vec::new(),
+            };
+
+            let r = f(&mut op)?;
+
+            let ClientImportOperation { op, notify_imported, notify_finalized } = op;
+            self.backend.commit_operation(op)?;
+
+            Ok(r)
+        };
+
+        inner()
     }
 }
 
@@ -63,7 +95,7 @@ impl<B, Block, RA, E> Finalizer<Block, B> for &Client<B, Block, RA, E> where Blo
 
 
 
-impl<B, Block, RA, E> AuxStore for Client<B, Block, RA, E> {
+impl<B, Block, RA, E> AuxStore for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> + backend::AuxStore {
     fn insert_aux<
         'a,
         'b: 'a,
@@ -71,15 +103,17 @@ impl<B, Block, RA, E> AuxStore for Client<B, Block, RA, E> {
         I: IntoIterator<Item=&'a (&'c [u8], &'c [u8])>,
         D: IntoIterator<Item=&'a &'b [u8]>,
     >(&self, insert: I, delete: D) -> Result<(), Error> {
-        unimplemented!()
+        self.lock_import_and_run(|op| {
+          apply_aux(op, insert, delete)
+        })
     }
 
     fn get_aux(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
-        unimplemented!()
+        backend::AuxStore::get_aux(&*self.backend, key)
     }
 }
 
-impl<B, Block, RA, E> AuxStore for &Client<B, Block, RA, E> {
+impl<B, Block, RA, E> AuxStore for &Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> + backend::AuxStore {
     fn insert_aux<
         'a,
         'b: 'a,

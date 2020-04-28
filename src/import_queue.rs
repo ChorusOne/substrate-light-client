@@ -17,10 +17,11 @@ use sp_api::TransactionFor;
 use crate::client::Client;
 use sc_client::light::backend::Backend;
 use crate::runtime::RuntimeApiConstructor;
+use sp_blockchain::Result as ClientResult;
 
 // TODO: Clean this up and abstract away some parts
 pub fn setup_import_queue(encoded_data: Vec<u8>)
-    -> BabeImportQueue<Block, TransactionFor<Client<Backend<LightStorage<Block>, BlakeTwo256>, Block, RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>, Block>>  {
+    -> ClientResult<BabeImportQueue<Block, TransactionFor<Client<Backend<LightStorage<Block>, BlakeTwo256>, Block, RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>, Block>>>  {
     let ibc_data = db::IBCData::decode(&mut encoded_data.as_slice()).unwrap();
     let grandpa_genesis_authority_set_provider = GenesisGrandpaAuthoritySetProvider::new(&ibc_data.genesis_data);
 
@@ -29,7 +30,7 @@ pub fn setup_import_queue(encoded_data: Vec<u8>)
         state_cache_child_ratio: Some((20, 100)),
         pruning: PruningMode::keep_blocks(256),
         source: DatabaseSettingsSrc::Custom(Arc::new(ibc_data.db))
-    }).unwrap();
+    })?;
 
     let light_blockchain = sc_client::light::new_light_blockchain(light_storage);
     let backend = sc_client::light::new_light_backend(light_blockchain.clone());
@@ -78,15 +79,15 @@ pub fn setup_import_queue(encoded_data: Vec<u8>)
         backend,
         &grandpa_genesis_authority_set_provider,
         Arc::new(fetch_checker),
-    ).unwrap();
+    )?;
 
     let finality_proof_import = grandpa_block_import.clone();
 
     let (babe_block_import, babe_link) = sc_consensus_babe::block_import(
-        sc_consensus_babe::Config::get_or_compute(&*client).unwrap(),
+        sc_consensus_babe::Config::get_or_compute(&*client)?,
         grandpa_block_import,
         client.clone(),
-    ).unwrap();
+    )?;
 
     let inherent_data_providers = InherentDataProviders::new();
 
@@ -97,14 +98,14 @@ pub fn setup_import_queue(encoded_data: Vec<u8>)
         Some(Box::new(finality_proof_import)),
         client.clone(),
         inherent_data_providers.clone(),
-    ).unwrap();
+    );
 }
 
 #[cfg(test)]
 mod tests {
     use crate::db::{create, IBCData};
     use crate::genesis::GenesisData;
-    use sc_consensus_babe::{BabeConfiguration, BabeImportQueue};
+    use sc_consensus_babe::BabeConfiguration;
     use kvdb::KeyValueDB;
     use sc_client_db::{PruningMode, DatabaseSettingsSrc, DatabaseSettings};
     use sc_client_db::light::LightStorage;
@@ -114,20 +115,14 @@ mod tests {
     use crate::types::Block;
     use sp_finality_grandpa::AuthorityId;
     use sp_core::crypto::Public;
-    use sp_api::{ProvideRuntimeApi, ApiRef, ApiExt};
-    use sc_consensus_babe::BabeApi;
-    use sp_runtime::generic::BlockId;
-    use std::ops::{Deref, DerefMut};
     use crate::client::Client;
-    use sp_runtime::traits::{Block as BlockT, Zero, BlakeTwo256};
-    use sp_consensus::BlockImport;
-    use sp_blockchain::{ProvideCache, HeaderBackend, HeaderMetadata};
-    use sc_client_api::AuxStore;
+    use sp_runtime::traits::{Block as BlockT, BlakeTwo256};
     use crate::runtime::RuntimeApiConstructor;
+    use std::ops::Deref;
 
     #[test]
     fn babe_configuration_fetch() {
-        let db = create(2);
+        let db = create(11);
         let mut transaction = db.transaction();
         transaction.put(0, b"key1", b"horse");
         transaction.put(1, b"key2", b"pigeon");
@@ -170,16 +165,7 @@ mod tests {
         });
 
         // RuntimeApi returned by client should return same configuration we passed
-        assert_eq!(call_babe_configuration(client).unwrap(), ibc_data.genesis_data.babe_configuration);
-    }
-
-    fn call_babe_configuration<Block: BlockT, Client>(
-        client: Arc<Client>,
-    ) -> std::result::Result<BabeConfiguration, sp_blockchain::Error> where
-        Client: ProvideRuntimeApi<Block> + ProvideCache<Block> + Send + Sync + AuxStore + 'static,
-        Client: HeaderBackend<Block> + HeaderMetadata<Block, Error = sp_blockchain::Error>,
-        Client::Api: BabeApi<Block> + ApiExt<Block, Error = sp_blockchain::Error>,
-    {
-        client.runtime_api().configuration(&BlockId::number(Zero::zero()))
+        let computed_babe_config = sc_consensus_babe::Config::get_or_compute(&*client).unwrap();
+        assert_eq!(*(computed_babe_config.deref()), ibc_data.genesis_data.babe_configuration);
     }
 }
