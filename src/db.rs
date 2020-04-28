@@ -140,9 +140,8 @@ mod tests {
     use kvdb::KeyValueDB;
     use parity_scale_codec::{Decode, Encode};
     use sc_consensus_babe::{AuthorityId as BabeAuthorityId, BabeConfiguration};
-    use sc_consensus_babe::Config;
     use sp_core::crypto::Public;
-    use sp_finality_grandpa::{AuthorityId, AuthorityList};
+    use sp_finality_grandpa::AuthorityId;
 
     use crate::db::{create, DB, IBCData};
     use crate::genesis::GenesisData;

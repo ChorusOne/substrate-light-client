@@ -97,7 +97,7 @@ impl<Block, C> ConstructRuntimeApi<Block, C> for RuntimeApiConstructor where Blo
         let response: NativeOrEncoded<BabeConfiguration> = call.call_api_at(call_api_params).unwrap();
 
         let babe_configuration = match response {
-            NativeOrEncoded::Encoded(mut encoded_babe_configuration) => BabeConfiguration::decode(&mut encoded_babe_configuration.as_slice()).unwrap(),
+            NativeOrEncoded::Encoded(encoded_babe_configuration) => BabeConfiguration::decode(&mut encoded_babe_configuration.as_slice()).unwrap(),
             _ => unimplemented!()
         };
 
