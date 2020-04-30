@@ -12,16 +12,21 @@ use sc_network::config::OnDemand;
 use sp_inherents::InherentDataProviders;
 use crate::genesis::GenesisGrandpaAuthoritySetProvider;
 use sc_consensus_babe::BabeImportQueue;
-use sp_runtime::traits::BlakeTwo256;
+use sp_runtime::traits::{BlakeTwo256, NumberFor};
 use sp_api::TransactionFor;
 use crate::client::Client;
 use sc_client::light::backend::Backend;
 use crate::runtime::RuntimeApiConstructor;
 use sp_blockchain::Result as ClientResult;
+use crate::verifier::GrandpaVerifier;
+use crate::block_import_wrapper::BlockImportWrapper;
+use sp_consensus::import_queue::{IncomingBlock, import_single_block, BlockImportResult, BlockImportError};
+use sp_consensus::{ImportResult, BlockOrigin, Error};
 
-// TODO: Clean this up and abstract away some parts
-pub fn setup_import_queue(encoded_data: Vec<u8>)
-    -> ClientResult<BabeImportQueue<Block, TransactionFor<Client<Backend<LightStorage<Block>, BlakeTwo256>, Block, RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>, Block>>>  {
+pub type BlockProcessor<B> = Box<dyn FnMut(IncomingBlock<B>) -> Result<BlockImportResult<NumberFor<B>>, BlockImportError>>;
+
+
+pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProcessor<Block>, db::IBCData)> {
     let ibc_data = db::IBCData::decode(&mut encoded_data.as_slice()).unwrap();
     let grandpa_genesis_authority_set_provider = GenesisGrandpaAuthoritySetProvider::new(&ibc_data.genesis_data);
 
@@ -29,7 +34,7 @@ pub fn setup_import_queue(encoded_data: Vec<u8>)
         state_cache_size: 2048,
         state_cache_child_ratio: Some((20, 100)),
         pruning: PruningMode::keep_blocks(256),
-        source: DatabaseSettingsSrc::Custom(Arc::new(ibc_data.db))
+        source: DatabaseSettingsSrc::Custom(Arc::new(ibc_data.db.clone()))
     })?;
 
     let light_blockchain = sc_client::light::new_light_blockchain(light_storage);
@@ -59,7 +64,7 @@ pub fn setup_import_queue(encoded_data: Vec<u8>)
         _phantom: PhantomData,
         _phantom2: PhantomData,
         _phantom3: PhantomData,
-        babe_configuration: ibc_data.genesis_data.babe_configuration
+        babe_configuration: ibc_data.genesis_data.babe_configuration.clone()
     });
 
     let light_data_checker = Arc::new(
@@ -81,24 +86,12 @@ pub fn setup_import_queue(encoded_data: Vec<u8>)
         Arc::new(fetch_checker),
     )?;
 
-    let finality_proof_import = grandpa_block_import.clone();
+    let mut grandpa_verifier = GrandpaVerifier::new(client.clone());
+    let mut block_import_wrapper: BlockImportWrapper<_, Block, Backend<LightStorage<Block>, BlakeTwo256>, _> = BlockImportWrapper::new(grandpa_block_import.clone(), client.clone());
 
-    let (babe_block_import, babe_link) = sc_consensus_babe::block_import(
-        sc_consensus_babe::Config::get_or_compute(&*client)?,
-        grandpa_block_import,
-        client.clone(),
-    )?;
-
-    let inherent_data_providers = InherentDataProviders::new();
-
-    return sc_consensus_babe::import_queue(
-        babe_link,
-        babe_block_import,
-        None,
-        Some(Box::new(finality_proof_import)),
-        client.clone(),
-        inherent_data_providers.clone(),
-    );
+    Ok((Box::new(move |incoming_block: IncomingBlock<Block>| {
+        import_single_block(&mut block_import_wrapper, BlockOrigin::NetworkBroadcast, incoming_block, &mut grandpa_verifier)
+    }), ibc_data))
 }
 
 #[cfg(test)]
