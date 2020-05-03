@@ -10,7 +10,7 @@ use sc_chain_spec::{GenericChainSpec, ChainType, NoExtension};
 use sc_finality_grandpa as grandpa;
 use sc_network::config::OnDemand;
 use sp_inherents::InherentDataProviders;
-use crate::genesis::GenesisGrandpaAuthoritySetProvider;
+use crate::dummy_objs::DummyGenesisGrandpaAuthoritySetProvider;
 use sc_consensus_babe::BabeImportQueue;
 use sp_runtime::traits::{BlakeTwo256, NumberFor};
 use sp_api::TransactionFor;
@@ -28,7 +28,10 @@ pub type BlockProcessor<B> = Box<dyn FnMut(IncomingBlock<B>) -> Result<BlockImpo
 
 pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProcessor<Block>, db::IBCData)> {
     let ibc_data = db::IBCData::decode(&mut encoded_data.as_slice()).unwrap();
-    let grandpa_genesis_authority_set_provider = GenesisGrandpaAuthoritySetProvider::new(&ibc_data.genesis_data);
+
+    // This dummy genesis provider will panic, So pre-requisite is to have
+    // light authority set inside auxiliary storage beforehand.
+    let dummy_grandpa_genesis_authority_set_provider = DummyGenesisGrandpaAuthoritySetProvider{};
 
     let light_storage = LightStorage::new(DatabaseSettings{
         state_cache_size: 2048,
@@ -64,8 +67,10 @@ pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProces
         _phantom: PhantomData,
         _phantom2: PhantomData,
         _phantom3: PhantomData,
-        babe_configuration: ibc_data.genesis_data.babe_configuration.clone()
+        aux_store_write_enabled: true,
     });
+
+    let read_only_aux_store_client = Arc::new(client.clone_with_read_only_aux_store());
 
     let light_data_checker = Arc::new(
         sc_client::light::new_fetch_checker::<_, Block, _>(
@@ -80,9 +85,9 @@ pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProces
     let fetch_checker = fetcher.checker().clone();
 
     let grandpa_block_import = grandpa::light_block_import(
-        client.clone(),
+        read_only_aux_store_client.clone(),
         backend,
-        &grandpa_genesis_authority_set_provider,
+        &dummy_grandpa_genesis_authority_set_provider,
         Arc::new(fetch_checker),
     )?;
 

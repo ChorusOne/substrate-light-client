@@ -22,20 +22,42 @@ use sc_client::apply_aux;
 
 pub struct Client<B, Block, RA, E> {
     pub backend: Arc<B>,
-    pub babe_configuration: BabeConfiguration,
     pub _phantom: PhantomData<RA>,
     pub _phantom2: PhantomData<Block>,
-    pub _phantom3: PhantomData<E>
+    pub _phantom3: PhantomData<E>,
+    pub aux_store_write_enabled: bool
+}
+
+impl<B, Block, RA, E> Client<B, Block, RA, E> {
+    pub fn clone_with_read_write_aux_store(&self) -> Self {
+        Self {
+            backend: self.backend.clone(),
+            _phantom: self._phantom.clone(),
+            _phantom2: self._phantom2.clone(),
+            _phantom3: self._phantom3.clone(),
+            aux_store_write_enabled: true
+        }
+    }
+
+    pub fn clone_with_read_only_aux_store(&self) -> Self {
+        Self {
+            backend: self.backend.clone(),
+            _phantom: self._phantom.clone(),
+            _phantom2: self._phantom2.clone(),
+            _phantom3: self._phantom3.clone(),
+            aux_store_write_enabled: false
+        }
+    }
 }
 
 impl<B, Block, RA, E> Clone for Client<B, Block, RA, E> {
     fn clone(&self) -> Self {
         Self {
             backend: self.backend.clone(),
-            babe_configuration: self.babe_configuration.clone(),
             _phantom: self._phantom.clone(),
             _phantom2: self._phantom2.clone(),
-            _phantom3: self._phantom3.clone()
+            _phantom3: self._phantom3.clone(),
+            aux_store_write_enabled: self.aux_store_write_enabled
         }
     }
 }
@@ -103,9 +125,13 @@ impl<B, Block, RA, E> AuxStore for Client<B, Block, RA, E> where Block: BlockT, 
         I: IntoIterator<Item=&'a (&'c [u8], &'c [u8])>,
         D: IntoIterator<Item=&'a &'b [u8]>,
     >(&self, insert: I, delete: D) -> Result<(), Error> {
-        self.lock_import_and_run(|op| {
-          apply_aux(op, insert, delete)
-        })
+        if !self.aux_store_write_enabled {
+            Ok(())
+        } else {
+            self.lock_import_and_run(|op| {
+                apply_aux(op, insert, delete)
+            })
+        }
     }
 
     fn get_aux(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
@@ -205,7 +231,7 @@ impl<B, Block, RA, E> ProvideRuntimeApi<Block> for Client<B, Block, RA, E> where
     type Api = <RA as ConstructRuntimeApi<Block, Self>>::RuntimeApi;
 
     fn runtime_api(&self) -> ApiRef<Self::Api> {
-        RA::construct_runtime_api(self)
+        unimplemented!()
     }
 }
 
@@ -214,12 +240,7 @@ impl<B, Block, RA, E> CallApiAt<Block> for Client<B, Block, RA, E> where Block: 
     type StateBackend = B::State;
 
     fn call_api_at<R: Encode + Decode + PartialEq, NC: FnOnce() -> std::result::Result<R, String> + UnwindSafe, C: Core<Block, Error=Self::Error>>(&self, params: CallApiAtParams<Block, C, NC, Self::StateBackend>) -> Result<NativeOrEncoded<R>, Self::Error> {
-        match params.function {
-            "genesis_config" => {
-                Ok(NativeOrEncoded::Encoded(self.babe_configuration.encode()))
-            },
-            _ => unimplemented!()
-        }
+        unimplemented!()
     }
 
     fn runtime_version_at(&self, at: &BlockId<Block>) -> Result<RuntimeVersion, Self::Error> {
@@ -250,12 +271,6 @@ impl<B, Block, RA, E> BlockImport<Block> for Client<B, Block, RA, E> where Block
 
     fn import_block(&mut self, block: BlockImportParams<Block, Self::Transaction>, new_cache: HashMap<[u8; 4], Vec<u8>, RandomState>) -> Result<ImportResult, Self::Error> {
         (&*self).import_block(block, new_cache)
-    }
-}
-
-impl<B, Block, RA, E> ProvideCache<Block> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
-    fn cache(&self) -> Option<Arc<dyn Cache<Block>>> {
-        unimplemented!()
     }
 }
 

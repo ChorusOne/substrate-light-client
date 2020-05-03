@@ -9,7 +9,8 @@ use sp_finality_grandpa::{GRANDPA_ENGINE_ID, ConsensusLog, ScheduledChange};
 use sp_runtime::traits::Header;
 use std::io::Write;
 use parity_scale_codec::alloc::borrow::Cow;
-use crate::common::{NEXT_CHANGE_IN_AUTHORITY_KEY, GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY, NextChangeInAuthority};
+use parity_scale_codec::Error as CodecError;
+use crate::common::{NEXT_CHANGE_IN_AUTHORITY_KEY, GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY, NextChangeInAuthority, LIGHT_AUTHORITY_SET_KEY, LightAuthoritySet};
 
 fn find_scheduled_change<B: BlockT>(header: &B::Header)
                                     -> Option<ScheduledChange<NumberFor<B>>>
@@ -27,7 +28,7 @@ fn find_scheduled_change<B: BlockT>(header: &B::Header)
 }
 
 pub struct GrandpaVerifier<Client> {
-    client: Arc<Client>
+    client: Arc<Client>,
 }
 
 impl<Client> GrandpaVerifier<Client> where Client: AuxStore + Send + Sync  {
@@ -72,6 +73,17 @@ impl<Block, Client> Verifier<Block> for GrandpaVerifier<Client> where Client: Au
         let mut block_import_params: BlockImportParams<Block, ()> = BlockImportParams::new(BlockOrigin::NetworkBroadcast, header);
         if let Some(next_authority_change) = possible_next_authority_change {
             block_import_params.intermediates.insert(Cow::from(GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY), Box::new(next_authority_change));
+        }
+
+        if let Some(authority_change) = possible_authority_change {
+            let possible_encoded_light_authority_set = self.client.get_aux(LIGHT_AUTHORITY_SET_KEY).map_err(|err| format!("{}", err))?;
+            let prev_authority_set = if possible_encoded_light_authority_set.is_none() {
+                Err("No previous authority set found")
+            } else {
+                Ok(LightAuthoritySet::decode(&mut possible_encoded_light_authority_set.unwrap().as_slice()).map_err(|err| format!("{}", err))?)
+            }?;
+            let next_authority_set = LightAuthoritySet::construct_next_authority_set(&prev_authority_set, authority_change.change.next_authorities);
+            self.client.insert_aux(&[(LIGHT_AUTHORITY_SET_KEY, next_authority_set.encode().as_slice())], &[]).map_err(|err| format!("{}", err)).map_err(|err| format!("{}", err))?;
         }
 
         Ok((block_import_params, None))
