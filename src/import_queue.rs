@@ -17,7 +17,7 @@ use sp_blockchain::Result as ClientResult;
 use crate::verifier::GrandpaVerifier;
 use crate::block_import_wrapper::BlockImportWrapper;
 use sp_consensus::import_queue::{IncomingBlock, import_single_block, BlockImportResult};
-use sp_consensus::{Error, BlockOrigin};
+use sp_consensus::BlockOrigin;
 use sc_client_api::FetchChecker;
 
 pub type BlockProcessor<B> = Box<dyn FnMut(IncomingBlock<B>) -> Result<BlockImportResult<NumberFor<B>>, String>>;
