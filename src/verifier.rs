@@ -7,7 +7,6 @@ use sp_runtime::traits::{Block as BlockT, NumberFor};
 use sp_runtime::generic::OpaqueDigestItemId;
 use sp_finality_grandpa::{GRANDPA_ENGINE_ID, ConsensusLog, ScheduledChange};
 use sp_runtime::traits::Header;
-use std::io::Write;
 use parity_scale_codec::alloc::borrow::Cow;
 use parity_scale_codec::Error as CodecError;
 use crate::common::{NEXT_CHANGE_IN_AUTHORITY_KEY, GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY, NextChangeInAuthority, LIGHT_AUTHORITY_SET_KEY, LightAuthoritySet};

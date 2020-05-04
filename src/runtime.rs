@@ -1,14 +1,9 @@
 use core::result;
-use std::cell::RefCell;
-
-use parity_scale_codec::Decode;
 use sc_client::StorageProof;
-use sc_consensus_babe::{BabeApi, BabeConfiguration};
-use sp_api::{ApiErrorExt, ApiExt, ApiRef, CallApiAt, CallApiAtParams, ChangesTrieState, ConstructRuntimeApi, Core, ExecutionContext, InitializeBlock, InMemoryBackend, NativeOrEncoded, RuntimeApiInfo, StorageChanges};
-use sp_block_builder::BlockBuilder;
+use sp_api::{ApiErrorExt, ApiExt, ApiRef, CallApiAt, ChangesTrieState, ConstructRuntimeApi, InMemoryBackend, RuntimeApiInfo, StorageChanges};
 use sp_blockchain::Error;
 use sp_runtime::generic::BlockId;
-use sp_runtime::traits::{Block as BlockT, HashFor, NumberFor, Zero};
+use sp_runtime::traits::{Block as BlockT, HashFor, NumberFor};
 
 pub struct RuntimeApiExt {
 

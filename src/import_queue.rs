@@ -8,22 +8,19 @@ use crate::types::Block;
 use std::marker::PhantomData;
 use sc_chain_spec::{GenericChainSpec, ChainType, NoExtension};
 use sc_finality_grandpa as grandpa;
-use sc_network::config::OnDemand;
-use sp_inherents::InherentDataProviders;
 use crate::dummy_objs::DummyGenesisGrandpaAuthoritySetProvider;
-use sc_consensus_babe::BabeImportQueue;
 use sp_runtime::traits::{BlakeTwo256, NumberFor};
-use sp_api::TransactionFor;
 use crate::client::Client;
 use sc_client::light::backend::Backend;
 use crate::runtime::RuntimeApiConstructor;
 use sp_blockchain::Result as ClientResult;
 use crate::verifier::GrandpaVerifier;
 use crate::block_import_wrapper::BlockImportWrapper;
-use sp_consensus::import_queue::{IncomingBlock, import_single_block, BlockImportResult, BlockImportError};
-use sp_consensus::{ImportResult, BlockOrigin, Error};
+use sp_consensus::import_queue::{IncomingBlock, import_single_block, BlockImportResult};
+use sp_consensus::{Error, BlockOrigin};
+use sc_client_api::FetchChecker;
 
-pub type BlockProcessor<B> = Box<dyn FnMut(IncomingBlock<B>) -> Result<BlockImportResult<NumberFor<B>>, BlockImportError>>;
+pub type BlockProcessor<B> = Box<dyn FnMut(IncomingBlock<B>) -> Result<BlockImportResult<NumberFor<B>>, String>>;
 
 
 pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProcessor<Block>, db::IBCData)> {
@@ -80,22 +77,22 @@ pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProces
         ),
     );
 
-    let fetcher = Arc::new(OnDemand::new(light_data_checker));
-
-    let fetch_checker = fetcher.checker().clone();
-
-    let grandpa_block_import = grandpa::light_block_import(
-        read_only_aux_store_client.clone(),
-        backend,
-        &dummy_grandpa_genesis_authority_set_provider,
-        Arc::new(fetch_checker),
-    )?;
-
-    let mut grandpa_verifier = GrandpaVerifier::new(client.clone());
-    let mut block_import_wrapper: BlockImportWrapper<_, Block, Backend<LightStorage<Block>, BlakeTwo256>, _> = BlockImportWrapper::new(grandpa_block_import.clone(), client.clone());
+    let fetch_checker: Arc<dyn FetchChecker<Block>> = light_data_checker.clone();
 
     Ok((Box::new(move |incoming_block: IncomingBlock<Block>| {
-        import_single_block(&mut block_import_wrapper, BlockOrigin::NetworkBroadcast, incoming_block, &mut grandpa_verifier)
+        let grandpa_block_import = grandpa::light_block_import(
+            read_only_aux_store_client.clone(),
+            backend.clone(),
+            &dummy_grandpa_genesis_authority_set_provider,
+            Arc::new(fetch_checker.clone()),
+        ).map_err(|e| {
+            format!("{}", e)
+        })?;
+        let mut grandpa_verifier = GrandpaVerifier::new(client.clone());
+        let mut block_import_wrapper: BlockImportWrapper<_, Block, Backend<LightStorage<Block>, BlakeTwo256>, _> = BlockImportWrapper::new(grandpa_block_import.clone(), client.clone());
+        import_single_block(&mut block_import_wrapper, BlockOrigin::NetworkBroadcast, incoming_block, &mut grandpa_verifier).map_err(|e| {
+            format!("{:?}", e)
+        })
     }), ibc_data))
 }
 

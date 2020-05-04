@@ -41,7 +41,7 @@ impl<Inner, Block, BE, AS> BlockImport<Block> for BlockImportWrapper<Inner, Bloc
     fn import_block(&mut self, mut block: BlockImportParams<Block, Self::Transaction>, cache: HashMap<[u8; 4], Vec<u8>, RandomState>) -> Result<ImportResult, Self::Error> {
 
         let possible_next_change_in_authority = match block.take_intermediate::<NextChangeInAuthority<Block>>(
-            NEXT_CHANGE_IN_AUTHORITY_KEY
+            GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY
         ) {
             Err(e) => {
                 match e {

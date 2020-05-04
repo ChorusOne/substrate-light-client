@@ -26,13 +26,8 @@ sp-version = "2.0.0-alpha.6"
 sc-client-api = "2.0.0-alpha.6"
 sc-chain-spec = "2.0.0-alpha.6"
 sc-finality-grandpa = "0.8.0-alpha.6"
-sc-network = "0.8.0-alpha.6"
 sp-core = "2.0.0-alpha.6"
-sc-consensus-babe = "0.8.0-alpha.6"
-sp-consensus-babe = "0.8.0-alpha.6"
-sp-inherents = "2.0.0-alpha.6"
 sp-storage = "2.0.0-alpha.6"
-sp-block-builder = "2.0.0-alpha.6"
 sp-finality-grandpa = "2.0.0-alpha.6"
 
 # Just to build on wasm
