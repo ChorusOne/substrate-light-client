@@ -94,28 +94,6 @@ impl<B, Block, RA, E> LockImportRun<Block, B> for Client<B, Block, RA, E> where 
     }
 }
 
-impl<B, Block, RA, E> Finalizer<Block, B> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
-    fn apply_finality(&self, operation: &mut ClientImportOperation<Block, B>, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
-        unimplemented!()
-    }
-
-    fn finalize_block(&self, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
-        unimplemented!()
-    }
-}
-
-impl<B, Block, RA, E> Finalizer<Block, B> for &Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
-    fn apply_finality(&self, operation: &mut ClientImportOperation<Block, B>, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
-        (**self).apply_finality(operation, id, justification, notify)
-    }
-
-    fn finalize_block(&self, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
-        (**self).finalize_block(id, justification, notify)
-    }
-}
-
-
-
 impl<B, Block, RA, E> AuxStore for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> + backend::AuxStore {
     fn insert_aux<
         'a,
@@ -252,10 +230,12 @@ impl<B, Block, RA, E> BlockImport<Block> for &Client<B, Block, RA, E> where Bloc
     type Transaction = TransactionFor<B, Block>;
 
     fn check_block(&mut self, block: BlockCheckParams<Block>) -> Result<ImportResult, Self::Error> {
+        // TODO: Implement this
         unimplemented!()
     }
 
     fn import_block(&mut self, block: BlockImportParams<Block, Self::Transaction>, cache: HashMap<[u8; 4], Vec<u8>, RandomState>) -> Result<ImportResult, Self::Error> {
+        // TODO: Implement this
         unimplemented!()
     }
 }
@@ -270,6 +250,29 @@ impl<B, Block, RA, E> BlockImport<Block> for Client<B, Block, RA, E> where Block
 
     fn import_block(&mut self, block: BlockImportParams<Block, Self::Transaction>, new_cache: HashMap<[u8; 4], Vec<u8>, RandomState>) -> Result<ImportResult, Self::Error> {
         (&*self).import_block(block, new_cache)
+    }
+}
+
+impl<B, Block, RA, E> Finalizer<Block, B> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
+    fn apply_finality(&self, operation: &mut ClientImportOperation<Block, B>, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
+        // TODO: Implement this
+        unimplemented!()
+    }
+
+    fn finalize_block(&self, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
+        self.lock_import_and_run(|op| {
+            self.apply_finality(op, id, justification, notify)
+        })
+    }
+}
+
+impl<B, Block, RA, E> Finalizer<Block, B> for &Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
+    fn apply_finality(&self, operation: &mut ClientImportOperation<Block, B>, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
+        (**self).apply_finality(operation, id, justification, notify)
+    }
+
+    fn finalize_block(&self, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
+        (**self).finalize_block(id, justification, notify)
     }
 }
 
