@@ -10,7 +10,7 @@ use sc_client_api::backend::{AuxStore, Finalizer, LockImportRun, BlockImportOper
 use sc_client_api::execution_extensions::ExecutionExtensions;
 use sp_api::{ApiRef, CallApiAt, CallApiAtParams, ConstructRuntimeApi, ProvideRuntimeApi};
 use sp_api::Core;
-use sp_blockchain::{BlockStatus, CachedHeaderMetadata, Error as BlockchainError, HeaderBackend, HeaderMetadata, Info, Result as BlockchainResult};
+use sp_blockchain::{BlockStatus, CachedHeaderMetadata, Error as BlockchainError, HeaderBackend, HeaderMetadata, Info, Result as BlockchainResult, Backend as BlockchainBackend};
 use sp_consensus::{BlockCheckParams, BlockImport, BlockImportParams, Error as ConsensusError, ImportResult, BlockStatus as ImportBlockStatus};
 use sp_core::NativeOrEncoded;
 use sp_runtime::generic::BlockId;
@@ -341,8 +341,30 @@ impl<B, Block, RA, E> BlockImport<Block> for Client<B, Block, RA, E> where Block
 
 impl<B, Block, RA, E> Finalizer<Block, B> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
     fn apply_finality(&self, operation: &mut ClientImportOperation<Block, B>, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
-        // TODO: Implement this
-        unimplemented!()
+        let to_be_finalized = self.backend.blockchain().expect_block_hash_from_id(&id)?;
+        let last_finalized = self.backend.blockchain().last_finalized()?;
+
+        if to_be_finalized == last_finalized {
+            return Ok(());
+        }
+
+        let route_from_finalized = sp_blockchain::tree_route(self.backend.blockchain(), last_finalized, to_be_finalized)?;
+
+        // Since we do not allow forks, retracted always needs to be empty and
+        // enacted always need to be non-empty
+        assert!(route_from_finalized.retracted().is_empty());
+        assert!(!route_from_finalized.enacted().is_empty());
+
+        let enacted = route_from_finalized.enacted();
+        assert!(enacted.len() > 0);
+        for finalize_new in &enacted[..enacted.len() - 1] {
+            operation.op.mark_finalized(BlockId::Hash(finalize_new.hash), None)?;
+        }
+
+        assert_eq!(enacted.last().map(|e| e.hash), Some(to_be_finalized));
+        operation.op.mark_finalized(BlockId::Hash(to_be_finalized), justification)?;
+
+        Ok(())
     }
 
     fn finalize_block(&self, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
