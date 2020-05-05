@@ -16,6 +16,19 @@ use sp_runtime::generic::BlockId;
 use sp_runtime::traits::{Block as BlockT, HashFor};
 use sp_state_machine::ExecutionManager;
 use sp_version::{NativeVersion, RuntimeVersion};
+use sc_finality_grandpa::GenesisAuthoritySetProvider;
+use sp_finality_grandpa::AuthorityList;
+
+#[derive(Clone)]
+pub struct DummyGenesisGrandpaAuthoritySetProvider {
+
+}
+
+impl<Block> GenesisAuthoritySetProvider<Block> for DummyGenesisGrandpaAuthoritySetProvider where Block: BlockT {
+    fn get(&self) -> Result<AuthorityList, Error> {
+        unimplemented!()
+    }
+}
 
 pub struct DummySpawnHandle {
 

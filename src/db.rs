@@ -7,8 +7,9 @@ use parity_util_mem::MallocSizeOf;
 use parking_lot::RwLock;
 
 use crate::genesis::GenesisData;
+use parity_scale_codec::alloc::sync::Arc;
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Clone)]
 pub struct IBCData {
     pub db: DB,
     pub genesis_data: GenesisData,
@@ -16,7 +17,7 @@ pub struct IBCData {
 
 #[derive(Default, MallocSizeOf)]
 pub struct DB {
-    columns: RwLock<HashMap<u32, BTreeMap<Vec<u8>, DBValue>>>
+    columns: Arc<RwLock<HashMap<u32, BTreeMap<Vec<u8>, DBValue>>>>
 }
 
 
@@ -27,7 +28,15 @@ pub fn create(num_cols: u32) -> DB {
         cols.insert(idx, BTreeMap::new());
     }
 
-    DB { columns: RwLock::new(cols) }
+    DB { columns: Arc::new(RwLock::new(cols)) }
+}
+
+impl Clone for DB {
+    fn clone(&self) -> Self {
+        Self {
+            columns: self.columns.clone()
+        }
+    }
 }
 
 impl KeyValueDB for DB {
@@ -127,7 +136,7 @@ impl Decode for DB {
             map.insert(i, v);
         }
 
-        ibcdb.columns = RwLock::new(map);
+        ibcdb.columns = Arc::new(RwLock::new(map));
 
         return Ok(ibcdb)
     }

@@ -5,6 +5,9 @@ mod client;
 mod types;
 mod genesis;
 mod runtime;
+mod verifier;
+mod block_import_wrapper;
+mod common;
 
 use sp_runtime::traits::{Block as BlockT};
 
