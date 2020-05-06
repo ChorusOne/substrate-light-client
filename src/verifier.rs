@@ -46,10 +46,7 @@ where
         }
     }
 
-    pub fn insert_authority_set(
-        &self,
-        light_authority_set: LightAuthoritySet,
-    ) -> Result<(), String> {
+    fn insert_authority_set(&self, light_authority_set: LightAuthoritySet) -> Result<(), String> {
         self.client
             .insert_aux(
                 &[(
@@ -61,7 +58,7 @@ where
             .map_err(|err| format!("{}", err))
     }
 
-    pub fn fetch_stored_authority_set(&self) -> Result<Option<LightAuthoritySet>, String> {
+    fn fetch_stored_authority_set(&self) -> Result<Option<LightAuthoritySet>, String> {
         let encoded_possible_light_authority_set = self
             .client
             .get_aux(LIGHT_AUTHORITY_SET_KEY)
@@ -80,13 +77,13 @@ where
         Ok(Some(light_authority_set))
     }
 
-    pub fn delete_stored_next_authority_change(&self) -> Result<(), String> {
+    fn delete_stored_next_authority_change(&self) -> Result<(), String> {
         self.client
             .insert_aux(&[], &[NEXT_CHANGE_IN_AUTHORITY_KEY])
             .map_err(|err| format!("{}", err))
     }
 
-    pub fn fetch_stored_next_authority_change(
+    fn fetch_stored_next_authority_change(
         &self,
     ) -> Result<Option<NextChangeInAuthority<Block>>, String> {
         let encoded_next_possible_authority_change = self

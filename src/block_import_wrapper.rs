@@ -7,6 +7,7 @@ use parity_scale_codec::alloc::sync::Arc;
 use parity_scale_codec::Encode;
 use sc_client_api::backend::TransactionFor;
 use sc_client_api::{AuxStore, Backend};
+use sp_blockchain::Error as BlockchainError;
 use sp_consensus::{
     BlockCheckParams, BlockImport, BlockImportParams, Error as ConsensusError, ImportResult,
 };
@@ -23,7 +24,13 @@ pub struct BlockImportWrapper<Inner, Block, Backend, AuxStore> {
     _phantom_data2: PhantomData<Backend>,
 }
 
-impl<Inner, Block, BE, AS> BlockImportWrapper<Inner, Block, BE, AS> {
+impl<Inner, Block, BE, AS> BlockImportWrapper<Inner, Block, BE, AS>
+where
+    Block: BlockT,
+    BE: Backend<Block>,
+    Inner: BlockImport<Block, Error = ConsensusError, Transaction = TransactionFor<BE, Block>>,
+    AS: AuxStore,
+{
     pub fn new(wrapped_block_import: Inner, aux_store: Arc<AS>) -> Self {
         Self {
             wrapped_block_import,
@@ -31,6 +38,19 @@ impl<Inner, Block, BE, AS> BlockImportWrapper<Inner, Block, BE, AS> {
             _phantom_data: PhantomData,
             _phantom_data2: PhantomData,
         }
+    }
+
+    fn store_next_authority_change(
+        &self,
+        next_authority_change: &NextChangeInAuthority<Block>,
+    ) -> Result<(), BlockchainError> {
+        self.aux_store.insert_aux(
+            &[(
+                NEXT_CHANGE_IN_AUTHORITY_KEY,
+                next_authority_change.encode().as_slice(),
+            )],
+            &[],
+        )
     }
 }
 
@@ -75,14 +95,7 @@ where
 
         if should_store_next_authority_change && possible_next_change_in_authority.is_some() {
             let next_change_in_authority = possible_next_change_in_authority.unwrap();
-            self.aux_store
-                .insert_aux(
-                    &[(
-                        NEXT_CHANGE_IN_AUTHORITY_KEY,
-                        next_change_in_authority.deref().encode().as_slice(),
-                    )],
-                    &[],
-                )
+            self.store_next_authority_change(next_change_in_authority.deref())
                 .map_err(|err| Self::Error::Other(Box::new(err)))?;
         }
 
