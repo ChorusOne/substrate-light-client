@@ -1,8 +1,8 @@
 use std::io;
 
 use kvdb::{DBOp, DBTransaction, DBValue, KeyValueDB};
-use parity_scale_codec::{Decode, Encode, Error, Input, Output};
 use parity_scale_codec::alloc::collections::{BTreeMap, HashMap};
+use parity_scale_codec::{Decode, Encode, Error, Input, Output};
 use parity_util_mem::MallocSizeOf;
 use parking_lot::RwLock;
 
@@ -17,9 +17,8 @@ pub struct IBCData {
 
 #[derive(Default, MallocSizeOf)]
 pub struct DB {
-    columns: Arc<RwLock<HashMap<u32, BTreeMap<Vec<u8>, DBValue>>>>
+    columns: Arc<RwLock<HashMap<u32, BTreeMap<Vec<u8>, DBValue>>>>,
 }
-
 
 pub fn create(num_cols: u32) -> DB {
     let mut cols = HashMap::new();
@@ -28,13 +27,15 @@ pub fn create(num_cols: u32) -> DB {
         cols.insert(idx, BTreeMap::new());
     }
 
-    DB { columns: Arc::new(RwLock::new(cols)) }
+    DB {
+        columns: Arc::new(RwLock::new(cols)),
+    }
 }
 
 impl Clone for DB {
     fn clone(&self) -> Self {
         Self {
-            columns: self.columns.clone()
+            columns: self.columns.clone(),
         }
     }
 }
@@ -43,7 +44,10 @@ impl KeyValueDB for DB {
     fn get(&self, col: u32, key: &[u8]) -> io::Result<Option<DBValue>> {
         let columns = self.columns.read();
         match columns.get(&col) {
-            None => Err(io::Error::new(io::ErrorKind::Other, format!("No such column family: {:?}", col))),
+            None => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("No such column family: {:?}", col),
+            )),
             Some(map) => Ok(map.get(key).cloned()),
         }
     }
@@ -52,9 +56,10 @@ impl KeyValueDB for DB {
         let columns = self.columns.read();
         match columns.get(&col) {
             None => None,
-            Some(map) => {
-                map.iter().find(|&(ref k, _)| k.starts_with(prefix)).map(|(_, v)| v.to_vec().into_boxed_slice())
-            }
+            Some(map) => map
+                .iter()
+                .find(|&(ref k, _)| k.starts_with(prefix))
+                .map(|(_, v)| v.to_vec().into_boxed_slice()),
         }
     }
 
@@ -85,7 +90,9 @@ impl KeyValueDB for DB {
         match self.columns.read().get(&col) {
             Some(map) => Box::new(
                 // TODO: Maybe need to optimize
-                map.clone().into_iter().map(|(k, v)| (k.into_boxed_slice(), v.into_boxed_slice())),
+                map.clone()
+                    .into_iter()
+                    .map(|(k, v)| (k.into_boxed_slice(), v.into_boxed_slice())),
             ),
             None => Box::new(None.into_iter()),
         }
@@ -108,7 +115,10 @@ impl KeyValueDB for DB {
     }
 
     fn restore(&self, _new_db: &str) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "Attempted to restore in-memory database"))
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "Attempted to restore in-memory database",
+        ))
     }
 }
 
@@ -129,7 +139,7 @@ impl Decode for DB {
         let length = u32::decode(value)?;
 
         let mut ibcdb = DB::default();
-        let mut map : HashMap<u32, BTreeMap<Vec<u8>, DBValue>> = HashMap::new();
+        let mut map: HashMap<u32, BTreeMap<Vec<u8>, DBValue>> = HashMap::new();
 
         for i in 0..length {
             let v: BTreeMap<Vec<u8>, DBValue> = BTreeMap::decode(value)?;
@@ -138,7 +148,7 @@ impl Decode for DB {
 
         ibcdb.columns = Arc::new(RwLock::new(map));
 
-        return Ok(ibcdb)
+        return Ok(ibcdb);
     }
 }
 
@@ -152,7 +162,7 @@ mod tests {
     use sp_core::crypto::Public;
     use sp_finality_grandpa::AuthorityId;
 
-    use crate::db::{create, DB, IBCData};
+    use crate::db::{create, IBCData, DB};
     use crate::genesis::GenesisData;
 
     #[test]
@@ -184,18 +194,18 @@ mod tests {
 
         let ibc_data = IBCData {
             db,
-            genesis_data: GenesisData{
+            genesis_data: GenesisData {
                 grandpa_authority_set_id: 2,
                 grandpa_authority_set: vec![(AuthorityId::from_slice(&[1; 32]), 5)],
-                babe_configuration: BabeConfiguration{
+                babe_configuration: BabeConfiguration {
                     slot_duration: 0,
                     epoch_length: 0,
                     c: (0, 0),
                     genesis_authorities: vec![],
                     randomness: [1; 32],
-                    secondary_slots: false
-                }
-            }
+                    secondary_slots: false,
+                },
+            },
         };
 
         let encoded_ibc_data = ibc_data.encode();
@@ -208,7 +218,10 @@ mod tests {
         assert_eq!(decoded_db.get(1, b"key3").unwrap().unwrap(), b"cat");
 
         assert_eq!(decoded_ibc_data.genesis_data.grandpa_authority_set_id, 2);
-        assert_eq!(decoded_ibc_data.genesis_data.grandpa_authority_set, vec![(AuthorityId::from_slice(&[1; 32]), 5)]);
+        assert_eq!(
+            decoded_ibc_data.genesis_data.grandpa_authority_set,
+            vec![(AuthorityId::from_slice(&[1; 32]), 5)]
+        );
     }
 
     #[test]
@@ -260,18 +273,18 @@ mod tests {
 
         let mut ibc_data = IBCData {
             db,
-            genesis_data: GenesisData{
+            genesis_data: GenesisData {
                 grandpa_authority_set_id: 2,
                 grandpa_authority_set: vec![(AuthorityId::from_slice(&[1; 32]), 5)],
-                babe_configuration: BabeConfiguration{
+                babe_configuration: BabeConfiguration {
                     slot_duration: 1,
                     epoch_length: 1,
                     c: (0, 0),
                     genesis_authorities: vec![],
                     randomness: [1; 32],
-                    secondary_slots: false
-                }
-            }
+                    secondary_slots: false,
+                },
+            },
         };
 
         // First test: If two IBCData instance are identical, their
@@ -283,7 +296,10 @@ mod tests {
             // Deserialization
             let decoded_ibc_data = IBCData::decode(&mut encoded_ibc_data.as_slice()).unwrap();
             // Deserialization need to produce same data every time
-            assert_eq!(encoded_ibc_data.as_slice(), decoded_ibc_data.encode().as_slice());
+            assert_eq!(
+                encoded_ibc_data.as_slice(),
+                decoded_ibc_data.encode().as_slice()
+            );
         }
 
         // Second test: If two instances of DBs are created from same binary blob,
@@ -297,19 +313,40 @@ mod tests {
         let duplicate_transaction = transaction.clone();
         // Insert into original db
         assert!(ibc_data.db.write(transaction).is_ok());
-        ibc_data.genesis_data.grandpa_authority_set = vec![(AuthorityId::from_slice(&[5; 32]), 5), (AuthorityId::from_slice(&[2; 32]), 45)];
+        ibc_data.genesis_data.grandpa_authority_set = vec![
+            (AuthorityId::from_slice(&[5; 32]), 5),
+            (AuthorityId::from_slice(&[2; 32]), 45),
+        ];
         ibc_data.genesis_data.grandpa_authority_set_id = 521;
         ibc_data.genesis_data.babe_configuration.epoch_length = 42;
-        ibc_data.genesis_data.babe_configuration.genesis_authorities = vec![(BabeAuthorityId::from_slice(&[5; 32]), 5), (BabeAuthorityId::from_slice(&[2; 32]), 45)];
+        ibc_data.genesis_data.babe_configuration.genesis_authorities = vec![
+            (BabeAuthorityId::from_slice(&[5; 32]), 5),
+            (BabeAuthorityId::from_slice(&[2; 32]), 45),
+        ];
 
         // Insert into an instance created from previous state of original db
         assert!(decoded_ibc_data.db.write(duplicate_transaction).is_ok());
-        decoded_ibc_data.genesis_data.grandpa_authority_set = vec![(AuthorityId::from_slice(&[5; 32]), 5), (AuthorityId::from_slice(&[2; 32]), 45)];
+        decoded_ibc_data.genesis_data.grandpa_authority_set = vec![
+            (AuthorityId::from_slice(&[5; 32]), 5),
+            (AuthorityId::from_slice(&[2; 32]), 45),
+        ];
         decoded_ibc_data.genesis_data.grandpa_authority_set_id = 521;
-        decoded_ibc_data.genesis_data.babe_configuration.epoch_length = 42;
-        decoded_ibc_data.genesis_data.babe_configuration.genesis_authorities = vec![(BabeAuthorityId::from_slice(&[5; 32]), 5), (BabeAuthorityId::from_slice(&[2; 32]), 45)];
+        decoded_ibc_data
+            .genesis_data
+            .babe_configuration
+            .epoch_length = 42;
+        decoded_ibc_data
+            .genesis_data
+            .babe_configuration
+            .genesis_authorities = vec![
+            (BabeAuthorityId::from_slice(&[5; 32]), 5),
+            (BabeAuthorityId::from_slice(&[2; 32]), 45),
+        ];
 
-        assert_eq!(ibc_data.encode().as_slice(), decoded_ibc_data.encode().as_slice());
+        assert_eq!(
+            ibc_data.encode().as_slice(),
+            decoded_ibc_data.encode().as_slice()
+        );
     }
 
     #[test]

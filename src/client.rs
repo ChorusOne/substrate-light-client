@@ -1,33 +1,47 @@
 use std::marker::PhantomData;
 use std::panic::UnwindSafe;
 
-use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec::alloc::collections::hash_map::RandomState;
 use parity_scale_codec::alloc::collections::HashMap;
 use parity_scale_codec::alloc::sync::Arc;
-use sc_client_api::{Backend, BlockchainEvents, call_executor::ExecutorProvider, CallExecutor, ClientImportOperation, FinalityNotifications, ImportNotifications, StorageEventStream, TransactionFor, backend, NewBlockState};
-use sc_client_api::backend::{AuxStore, Finalizer, LockImportRun, BlockImportOperation};
+use parity_scale_codec::{Decode, Encode};
+use sc_client::apply_aux;
+use sc_client_api::backend::{AuxStore, BlockImportOperation, Finalizer, LockImportRun};
 use sc_client_api::execution_extensions::ExecutionExtensions;
-use sp_api::{ApiRef, CallApiAt, CallApiAtParams, ConstructRuntimeApi, ProvideRuntimeApi};
+use sc_client_api::{
+    backend, call_executor::ExecutorProvider, Backend, BlockchainEvents, CallExecutor,
+    ClientImportOperation, FinalityNotifications, ImportNotifications, NewBlockState,
+    StorageEventStream, TransactionFor,
+};
 use sp_api::Core;
-use sp_blockchain::{BlockStatus, CachedHeaderMetadata, Error as BlockchainError, HeaderBackend, HeaderMetadata, Info, Result as BlockchainResult, Backend as BlockchainBackend};
-use sp_consensus::{BlockCheckParams, BlockImport, BlockImportParams, Error as ConsensusError, ImportResult, BlockStatus as ImportBlockStatus};
+use sp_api::{ApiRef, CallApiAt, CallApiAtParams, ConstructRuntimeApi, ProvideRuntimeApi};
+use sp_blockchain::{
+    Backend as BlockchainBackend, BlockStatus, CachedHeaderMetadata, Error as BlockchainError,
+    HeaderBackend, HeaderMetadata, Info, Result as BlockchainResult,
+};
+use sp_consensus::{
+    BlockCheckParams, BlockImport, BlockImportParams, BlockStatus as ImportBlockStatus,
+    Error as ConsensusError, ImportResult,
+};
 use sp_core::NativeOrEncoded;
 use sp_runtime::generic::BlockId;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 use sp_storage::StorageKey;
 use sp_version::RuntimeVersion;
-use sc_client::apply_aux;
 
 pub struct Client<B, Block, RA, E> {
     pub backend: Arc<B>,
     pub _phantom: PhantomData<RA>,
     pub _phantom2: PhantomData<Block>,
     pub _phantom3: PhantomData<E>,
-    pub aux_store_write_enabled: bool
+    pub aux_store_write_enabled: bool,
 }
 
-impl<B, Block, RA, E> Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
+impl<B, Block, RA, E> Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+{
     pub fn block_status(&self, id: &BlockId<Block>) -> BlockchainResult<ImportBlockStatus> {
         let hash_and_number = match id.clone() {
             BlockId::Hash(hash) => self.backend.blockchain().number(hash)?.map(|n| (hash, n)),
@@ -53,7 +67,7 @@ impl<B, Block, RA, E> Client<B, Block, RA, E> {
             _phantom: self._phantom.clone(),
             _phantom2: self._phantom2.clone(),
             _phantom3: self._phantom3.clone(),
-            aux_store_write_enabled: true
+            aux_store_write_enabled: true,
         }
     }
 
@@ -63,7 +77,7 @@ impl<B, Block, RA, E> Client<B, Block, RA, E> {
             _phantom: self._phantom.clone(),
             _phantom2: self._phantom2.clone(),
             _phantom3: self._phantom3.clone(),
-            aux_store_write_enabled: false
+            aux_store_write_enabled: false,
         }
     }
 }
@@ -75,23 +89,35 @@ impl<B, Block, RA, E> Clone for Client<B, Block, RA, E> {
             _phantom: self._phantom.clone(),
             _phantom2: self._phantom2.clone(),
             _phantom3: self._phantom3.clone(),
-            aux_store_write_enabled: self.aux_store_write_enabled
+            aux_store_write_enabled: self.aux_store_write_enabled,
         }
     }
 }
 
-impl<B, Block, RA, E> LockImportRun<Block, B> for &Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
-    fn lock_import_and_run<R, Err, F>(&self, f: F) -> Result<R, Err> where
+impl<B, Block, RA, E> LockImportRun<Block, B> for &Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+{
+    fn lock_import_and_run<R, Err, F>(&self, f: F) -> Result<R, Err>
+    where
         F: FnOnce(&mut ClientImportOperation<Block, B>) -> Result<R, Err>,
-        Err: From<BlockchainError> {
+        Err: From<BlockchainError>,
+    {
         (**self).lock_import_and_run(f)
     }
 }
 
-impl<B, Block, RA, E> LockImportRun<Block, B> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block>  {
-    fn lock_import_and_run<R, Err, F>(&self, f: F) -> Result<R, Err> where
+impl<B, Block, RA, E> LockImportRun<Block, B> for Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+{
+    fn lock_import_and_run<R, Err, F>(&self, f: F) -> Result<R, Err>
+    where
         F: FnOnce(&mut ClientImportOperation<Block, B>) -> Result<R, Err>,
-        Err: From<BlockchainError> {
+        Err: From<BlockchainError>,
+    {
         let inner = || {
             let _import_lock = self.backend.get_import_lock().write();
 
@@ -103,7 +129,11 @@ impl<B, Block, RA, E> LockImportRun<Block, B> for Client<B, Block, RA, E> where 
 
             let r = f(&mut op)?;
 
-            let ClientImportOperation { op, notify_imported, notify_finalized } = op;
+            let ClientImportOperation {
+                op,
+                notify_imported,
+                notify_finalized,
+            } = op;
             self.backend.commit_operation(op)?;
 
             Ok(r)
@@ -113,20 +143,26 @@ impl<B, Block, RA, E> LockImportRun<Block, B> for Client<B, Block, RA, E> where 
     }
 }
 
-impl<B, Block, RA, E> AuxStore for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> + backend::AuxStore {
+impl<B, Block, RA, E> AuxStore for Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block> + backend::AuxStore,
+{
     fn insert_aux<
         'a,
         'b: 'a,
         'c: 'a,
-        I: IntoIterator<Item=&'a (&'c [u8], &'c [u8])>,
-        D: IntoIterator<Item=&'a &'b [u8]>,
-    >(&self, insert: I, delete: D) -> BlockchainResult<()> {
+        I: IntoIterator<Item = &'a (&'c [u8], &'c [u8])>,
+        D: IntoIterator<Item = &'a &'b [u8]>,
+    >(
+        &self,
+        insert: I,
+        delete: D,
+    ) -> BlockchainResult<()> {
         if !self.aux_store_write_enabled {
             Ok(())
         } else {
-            self.lock_import_and_run(|op| {
-                apply_aux(op, insert, delete)
-            })
+            self.lock_import_and_run(|op| apply_aux(op, insert, delete))
         }
     }
 
@@ -135,14 +171,22 @@ impl<B, Block, RA, E> AuxStore for Client<B, Block, RA, E> where Block: BlockT, 
     }
 }
 
-impl<B, Block, RA, E> AuxStore for &Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> + backend::AuxStore {
+impl<B, Block, RA, E> AuxStore for &Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block> + backend::AuxStore,
+{
     fn insert_aux<
         'a,
         'b: 'a,
         'c: 'a,
-        I: IntoIterator<Item=&'a (&'c [u8], &'c [u8])>,
-        D: IntoIterator<Item=&'a &'b [u8]>,
-    >(&self, insert: I, delete: D) -> BlockchainResult<()> {
+        I: IntoIterator<Item = &'a (&'c [u8], &'c [u8])>,
+        D: IntoIterator<Item = &'a &'b [u8]>,
+    >(
+        &self,
+        insert: I,
+        delete: D,
+    ) -> BlockchainResult<()> {
         (**self).insert_aux(insert, delete)
     }
 
@@ -151,25 +195,39 @@ impl<B, Block, RA, E> AuxStore for &Client<B, Block, RA, E> where Block: BlockT,
     }
 }
 
-impl<B, Block, RA, E> HeaderMetadata<Block> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
+impl<B, Block, RA, E> HeaderMetadata<Block> for Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+{
     /// Error used in case the header metadata is not found.
     type Error = BlockchainError;
 
-    fn header_metadata(&self, hash: Block::Hash) -> Result<CachedHeaderMetadata<Block>, Self::Error> {
+    fn header_metadata(
+        &self,
+        hash: Block::Hash,
+    ) -> Result<CachedHeaderMetadata<Block>, Self::Error> {
         self.backend.blockchain().header_metadata(hash)
     }
 
     fn insert_header_metadata(&self, hash: Block::Hash, metadata: CachedHeaderMetadata<Block>) {
-        self.backend.blockchain().insert_header_metadata(hash, metadata)
+        self.backend
+            .blockchain()
+            .insert_header_metadata(hash, metadata)
     }
-
 
     fn remove_header_metadata(&self, hash: Block::Hash) {
         self.backend.blockchain().remove_header_metadata(hash)
     }
 }
 
-impl<B, Block, RA, E> HeaderBackend<Block> for Client<B, Block, RA, E> where Block: BlockT, RA: Sync + Send, B: Sync + Send + Backend<Block>, E: Sync + Send {
+impl<B, Block, RA, E> HeaderBackend<Block> for Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    RA: Sync + Send,
+    B: Sync + Send + Backend<Block>,
+    E: Sync + Send,
+{
     /// Get block header. Returns `None` if block is not found.
     fn header(&self, id: BlockId<Block>) -> BlockchainResult<Option<Block::Header>> {
         self.backend.blockchain().header(id)
@@ -186,7 +244,10 @@ impl<B, Block, RA, E> HeaderBackend<Block> for Client<B, Block, RA, E> where Blo
     }
 
     /// Get block number by hash. Returns `None` if the header is not in the chain.
-    fn number(&self, hash: Block::Hash) -> BlockchainResult<Option<<<Block as BlockT>::Header as HeaderT>::Number>> {
+    fn number(
+        &self,
+        hash: Block::Hash,
+    ) -> BlockchainResult<Option<<<Block as BlockT>::Header as HeaderT>::Number>> {
         self.backend.blockchain().number(hash)
     }
 
@@ -196,7 +257,13 @@ impl<B, Block, RA, E> HeaderBackend<Block> for Client<B, Block, RA, E> where Blo
     }
 }
 
-impl<B, Block, RA, E> HeaderBackend<Block> for &Client<B, Block, RA, E> where Block: BlockT, RA: Sync + Send, B: Sync + Send + Backend<Block>, E: Sync + Send {
+impl<B, Block, RA, E> HeaderBackend<Block> for &Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    RA: Sync + Send,
+    B: Sync + Send + Backend<Block>,
+    E: Sync + Send,
+{
     /// Get block header. Returns `None` if block is not found.
     fn header(&self, id: BlockId<Block>) -> BlockchainResult<Option<Block::Header>> {
         (**self).header(id)
@@ -213,7 +280,10 @@ impl<B, Block, RA, E> HeaderBackend<Block> for &Client<B, Block, RA, E> where Bl
     }
 
     /// Get block number by hash. Returns `None` if the header is not in the chain.
-    fn number(&self, hash: Block::Hash) -> BlockchainResult<Option<<<Block as BlockT>::Header as HeaderT>::Number>> {
+    fn number(
+        &self,
+        hash: Block::Hash,
+    ) -> BlockchainResult<Option<<<Block as BlockT>::Header as HeaderT>::Number>> {
         (**self).number(hash)
     }
 
@@ -223,7 +293,12 @@ impl<B, Block, RA, E> HeaderBackend<Block> for &Client<B, Block, RA, E> where Bl
     }
 }
 
-impl<B, Block, RA, E> ProvideRuntimeApi<Block> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block>, RA: ConstructRuntimeApi<Block, Self>  {
+impl<B, Block, RA, E> ProvideRuntimeApi<Block> for Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+    RA: ConstructRuntimeApi<Block, Self>,
+{
     type Api = <RA as ConstructRuntimeApi<Block, Self>>::RuntimeApi;
 
     fn runtime_api(&self) -> ApiRef<Self::Api> {
@@ -231,11 +306,22 @@ impl<B, Block, RA, E> ProvideRuntimeApi<Block> for Client<B, Block, RA, E> where
     }
 }
 
-impl<B, Block, RA, E> CallApiAt<Block> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
+impl<B, Block, RA, E> CallApiAt<Block> for Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+{
     type Error = BlockchainError;
     type StateBackend = B::State;
 
-    fn call_api_at<R: Encode + Decode + PartialEq, NC: FnOnce() -> std::result::Result<R, String> + UnwindSafe, C: Core<Block, Error=Self::Error>>(&self, params: CallApiAtParams<Block, C, NC, Self::StateBackend>) -> Result<NativeOrEncoded<R>, Self::Error> {
+    fn call_api_at<
+        R: Encode + Decode + PartialEq,
+        NC: FnOnce() -> std::result::Result<R, String> + UnwindSafe,
+        C: Core<Block, Error = Self::Error>,
+    >(
+        &self,
+        params: CallApiAtParams<Block, C, NC, Self::StateBackend>,
+    ) -> Result<NativeOrEncoded<R>, Self::Error> {
         unimplemented!()
     }
 
@@ -244,35 +330,55 @@ impl<B, Block, RA, E> CallApiAt<Block> for Client<B, Block, RA, E> where Block: 
     }
 }
 
-impl<B, Block, RA, E> BlockImport<Block> for &Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
+impl<B, Block, RA, E> BlockImport<Block> for &Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+{
     type Error = ConsensusError;
     type Transaction = TransactionFor<B, Block>;
 
     fn check_block(&mut self, block: BlockCheckParams<Block>) -> Result<ImportResult, Self::Error> {
-        let BlockCheckParams { hash, number, parent_hash, allow_missing_state, import_existing } = block;
+        let BlockCheckParams {
+            hash,
+            number,
+            parent_hash,
+            allow_missing_state,
+            import_existing,
+        } = block;
 
-        match self.block_status(&BlockId::Hash(hash))
+        match self
+            .block_status(&BlockId::Hash(hash))
             .map_err(|e| ConsensusError::ClientImport(e.to_string()))?
         {
-            ImportBlockStatus::InChainWithState | ImportBlockStatus::Queued if !import_existing  => return Ok(ImportResult::AlreadyInChain),
-            ImportBlockStatus::InChainWithState | ImportBlockStatus::Queued | ImportBlockStatus::Unknown => {},
+            ImportBlockStatus::InChainWithState | ImportBlockStatus::Queued if !import_existing => {
+                return Ok(ImportResult::AlreadyInChain)
+            }
+            ImportBlockStatus::InChainWithState
+            | ImportBlockStatus::Queued
+            | ImportBlockStatus::Unknown => {}
             ImportBlockStatus::InChainPruned => return Ok(ImportResult::AlreadyInChain),
             ImportBlockStatus::KnownBad => return Ok(ImportResult::KnownBad),
         }
 
-        match self.block_status(&BlockId::Hash(parent_hash))
+        match self
+            .block_status(&BlockId::Hash(parent_hash))
             .map_err(|e| ConsensusError::ClientImport(e.to_string()))?
         {
-            ImportBlockStatus::InChainWithState | ImportBlockStatus::Queued => {},
+            ImportBlockStatus::InChainWithState | ImportBlockStatus::Queued => {}
             ImportBlockStatus::Unknown => return Ok(ImportResult::UnknownParent),
-            ImportBlockStatus::InChainPruned if allow_missing_state => {},
+            ImportBlockStatus::InChainPruned if allow_missing_state => {}
             ImportBlockStatus::InChainPruned => return Ok(ImportResult::MissingState),
             ImportBlockStatus::KnownBad => return Ok(ImportResult::KnownBad),
         }
         Ok(ImportResult::imported(false))
     }
 
-    fn import_block(&mut self, block: BlockImportParams<Block, Self::Transaction>, cache: HashMap<[u8; 4], Vec<u8>, RandomState>) -> Result<ImportResult, Self::Error> {
+    fn import_block(
+        &mut self,
+        block: BlockImportParams<Block, Self::Transaction>,
+        cache: HashMap<[u8; 4], Vec<u8>, RandomState>,
+    ) -> Result<ImportResult, Self::Error> {
         self.lock_import_and_run(|operation| {
             let BlockImportParams {
                 origin,
@@ -301,7 +407,7 @@ impl<B, Block, RA, E> BlockImport<Block> for &Client<B, Block, RA, E> where Bloc
 
             match status {
                 BlockStatus::InChain => return Ok(ImportResult::AlreadyInChain),
-                BlockStatus::Unknown => {},
+                BlockStatus::Unknown => {}
             }
 
             let info = self.backend.blockchain().info();
@@ -320,13 +426,16 @@ impl<B, Block, RA, E> BlockImport<Block> for &Client<B, Block, RA, E> where Bloc
             )?;
 
             Ok(ImportResult::imported(false))
-        }).map_err(|e| {
-            ConsensusError::ClientImport(e.to_string()).into()
         })
+        .map_err(|e| ConsensusError::ClientImport(e.to_string()).into())
     }
 }
 
-impl<B, Block, RA, E> BlockImport<Block> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
+impl<B, Block, RA, E> BlockImport<Block> for Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+{
     type Error = ConsensusError;
     type Transaction = TransactionFor<B, Block>;
 
@@ -334,13 +443,27 @@ impl<B, Block, RA, E> BlockImport<Block> for Client<B, Block, RA, E> where Block
         (&*self).check_block(block)
     }
 
-    fn import_block(&mut self, block: BlockImportParams<Block, Self::Transaction>, new_cache: HashMap<[u8; 4], Vec<u8>, RandomState>) -> Result<ImportResult, Self::Error> {
+    fn import_block(
+        &mut self,
+        block: BlockImportParams<Block, Self::Transaction>,
+        new_cache: HashMap<[u8; 4], Vec<u8>, RandomState>,
+    ) -> Result<ImportResult, Self::Error> {
         (&*self).import_block(block, new_cache)
     }
 }
 
-impl<B, Block, RA, E> Finalizer<Block, B> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
-    fn apply_finality(&self, operation: &mut ClientImportOperation<Block, B>, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
+impl<B, Block, RA, E> Finalizer<Block, B> for Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+{
+    fn apply_finality(
+        &self,
+        operation: &mut ClientImportOperation<Block, B>,
+        id: BlockId<Block>,
+        justification: Option<Vec<u8>>,
+        notify: bool,
+    ) -> BlockchainResult<()> {
         let to_be_finalized = self.backend.blockchain().expect_block_hash_from_id(&id)?;
         let last_finalized = self.backend.blockchain().last_finalized()?;
 
@@ -348,7 +471,8 @@ impl<B, Block, RA, E> Finalizer<Block, B> for Client<B, Block, RA, E> where Bloc
             return Ok(());
         }
 
-        let route_from_finalized = sp_blockchain::tree_route(self.backend.blockchain(), last_finalized, to_be_finalized)?;
+        let route_from_finalized =
+            sp_blockchain::tree_route(self.backend.blockchain(), last_finalized, to_be_finalized)?;
 
         // Since we do not allow forks, retracted always needs to be empty and
         // enacted always need to be non-empty
@@ -358,33 +482,60 @@ impl<B, Block, RA, E> Finalizer<Block, B> for Client<B, Block, RA, E> where Bloc
         let enacted = route_from_finalized.enacted();
         assert!(enacted.len() > 0);
         for finalize_new in &enacted[..enacted.len() - 1] {
-            operation.op.mark_finalized(BlockId::Hash(finalize_new.hash), None)?;
+            operation
+                .op
+                .mark_finalized(BlockId::Hash(finalize_new.hash), None)?;
         }
 
         assert_eq!(enacted.last().map(|e| e.hash), Some(to_be_finalized));
-        operation.op.mark_finalized(BlockId::Hash(to_be_finalized), justification)?;
+        operation
+            .op
+            .mark_finalized(BlockId::Hash(to_be_finalized), justification)?;
 
         Ok(())
     }
 
-    fn finalize_block(&self, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
-        self.lock_import_and_run(|op| {
-            self.apply_finality(op, id, justification, notify)
-        })
+    fn finalize_block(
+        &self,
+        id: BlockId<Block>,
+        justification: Option<Vec<u8>>,
+        notify: bool,
+    ) -> BlockchainResult<()> {
+        self.lock_import_and_run(|op| self.apply_finality(op, id, justification, notify))
     }
 }
 
-impl<B, Block, RA, E> Finalizer<Block, B> for &Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
-    fn apply_finality(&self, operation: &mut ClientImportOperation<Block, B>, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
+impl<B, Block, RA, E> Finalizer<Block, B> for &Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+{
+    fn apply_finality(
+        &self,
+        operation: &mut ClientImportOperation<Block, B>,
+        id: BlockId<Block>,
+        justification: Option<Vec<u8>>,
+        notify: bool,
+    ) -> BlockchainResult<()> {
         (**self).apply_finality(operation, id, justification, notify)
     }
 
-    fn finalize_block(&self, id: BlockId<Block>, justification: Option<Vec<u8>>, notify: bool) -> BlockchainResult<()> {
+    fn finalize_block(
+        &self,
+        id: BlockId<Block>,
+        justification: Option<Vec<u8>>,
+        notify: bool,
+    ) -> BlockchainResult<()> {
         (**self).finalize_block(id, justification, notify)
     }
 }
 
-impl<B, Block, RA, E> ExecutorProvider<Block> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block>, E: CallExecutor<Block> {
+impl<B, Block, RA, E> ExecutorProvider<Block> for Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+    E: CallExecutor<Block>,
+{
     type Executor = E;
 
     fn executor(&self) -> &Self::Executor {
@@ -398,7 +549,11 @@ impl<B, Block, RA, E> ExecutorProvider<Block> for Client<B, Block, RA, E> where 
 
 // Blockchain Events are not being fired while importing block.
 // So, no need to implement it.
-impl <B, Block, RA, E> BlockchainEvents<Block> for Client<B, Block, RA, E> where Block: BlockT, B: Backend<Block> {
+impl<B, Block, RA, E> BlockchainEvents<Block> for Client<B, Block, RA, E>
+where
+    Block: BlockT,
+    B: Backend<Block>,
+{
     fn import_notification_stream(&self) -> ImportNotifications<Block> {
         unimplemented!()
     }
@@ -407,7 +562,11 @@ impl <B, Block, RA, E> BlockchainEvents<Block> for Client<B, Block, RA, E> where
         unimplemented!()
     }
 
-    fn storage_changes_notification_stream(&self, filter_keys: Option<&[StorageKey]>, child_filter_keys: Option<&[(StorageKey, Option<Vec<StorageKey>>)]>) -> BlockchainResult<StorageEventStream<Block::Hash>> {
+    fn storage_changes_notification_stream(
+        &self,
+        filter_keys: Option<&[StorageKey]>,
+        child_filter_keys: Option<&[(StorageKey, Option<Vec<StorageKey>>)]>,
+    ) -> BlockchainResult<StorageEventStream<Block::Hash>> {
         unimplemented!()
     }
 }

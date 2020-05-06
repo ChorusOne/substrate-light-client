@@ -7,77 +7,106 @@ use futures_task::{FutureObj, Spawn, SpawnError};
 use parity_scale_codec::{Decode, Encode};
 use sc_client::{CallExecutor, ExecutionStrategy, StorageProof};
 use sc_client_api::light::Storage as LightStorage;
-use sp_api::{InitializeBlock, NativeOrEncoded, OverlayedChanges, ProofRecorder, StorageTransactionCache};
+use sc_finality_grandpa::GenesisAuthoritySetProvider;
+use sp_api::{
+    InitializeBlock, NativeOrEncoded, OverlayedChanges, ProofRecorder, StorageTransactionCache,
+};
 use sp_blockchain::Error;
 use sp_core::traits::{CallInWasm, CloneableSpawn, CodeExecutor, RuntimeCode};
 use sp_externalities::{Extensions, Externalities};
+use sp_finality_grandpa::AuthorityList;
 use sp_runtime::codec;
 use sp_runtime::generic::BlockId;
 use sp_runtime::traits::{Block as BlockT, HashFor};
 use sp_state_machine::ExecutionManager;
 use sp_version::{NativeVersion, RuntimeVersion};
-use sc_finality_grandpa::GenesisAuthoritySetProvider;
-use sp_finality_grandpa::AuthorityList;
 
 #[derive(Clone)]
-pub struct DummyGenesisGrandpaAuthoritySetProvider {
+pub struct DummyGenesisGrandpaAuthoritySetProvider {}
 
-}
-
-impl<Block> GenesisAuthoritySetProvider<Block> for DummyGenesisGrandpaAuthoritySetProvider where Block: BlockT {
+impl<Block> GenesisAuthoritySetProvider<Block> for DummyGenesisGrandpaAuthoritySetProvider
+where
+    Block: BlockT,
+{
     fn get(&self) -> Result<AuthorityList, Error> {
         unimplemented!()
     }
 }
 
-pub struct DummySpawnHandle {
+pub struct DummySpawnHandle {}
 
-}
-
-impl Spawn for DummySpawnHandle{
+impl Spawn for DummySpawnHandle {
     fn spawn_obj(&self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
         unimplemented!()
     }
 }
 
-impl CloneableSpawn for DummySpawnHandle{
+impl CloneableSpawn for DummySpawnHandle {
     fn clone(&self) -> Box<dyn CloneableSpawn> {
-        Box::new(DummySpawnHandle{})
+        Box::new(DummySpawnHandle {})
     }
 }
 
-pub struct DummyCallExecutor<B: BlockT, Storage: LightStorage<B>>{
+pub struct DummyCallExecutor<B: BlockT, Storage: LightStorage<B>> {
     pub _phantom: PhantomData<B>,
     pub _phantom2: PhantomData<Storage>,
 }
 
-impl<B, Storage> Clone for DummyCallExecutor<B, Storage> where B: BlockT, Storage: LightStorage<B> {
+impl<B, Storage> Clone for DummyCallExecutor<B, Storage>
+where
+    B: BlockT,
+    Storage: LightStorage<B>,
+{
     fn clone(&self) -> Self {
         DummyCallExecutor {
             _phantom: PhantomData,
-            _phantom2: PhantomData
+            _phantom2: PhantomData,
         }
     }
 }
 
-impl<B, Storage> CallInWasm for DummyCallExecutor<B, Storage> where B: BlockT, Storage: LightStorage<B>   {
-    fn call_in_wasm(&self, wasm_code: &[u8], code_hash: Option<Vec<u8>>, method: &str, call_data: &[u8], ext: &mut dyn Externalities) -> Result<Vec<u8>, String> {
+impl<B, Storage> CallInWasm for DummyCallExecutor<B, Storage>
+where
+    B: BlockT,
+    Storage: LightStorage<B>,
+{
+    fn call_in_wasm(
+        &self,
+        wasm_code: &[u8],
+        code_hash: Option<Vec<u8>>,
+        method: &str,
+        call_data: &[u8],
+        ext: &mut dyn Externalities,
+    ) -> Result<Vec<u8>, String> {
         unimplemented!()
     }
 }
 
-impl<B, Storage> CodeExecutor for DummyCallExecutor<B, Storage> where B: BlockT, Storage: LightStorage<B> + 'static {
+impl<B, Storage> CodeExecutor for DummyCallExecutor<B, Storage>
+where
+    B: BlockT,
+    Storage: LightStorage<B> + 'static,
+{
     type Error = Error;
 
-    fn call<
-        R: codec::Codec + PartialEq,
-        NC: FnOnce() -> Result<R, String> + UnwindSafe,
-    >(&self, ext: &mut dyn Externalities, runtime_code: &RuntimeCode<'_>, method: &str, data: &[u8], use_native: bool, native_call: Option<NC>) -> (Result<NativeOrEncoded<R>, Self::Error>, bool) {
+    fn call<R: codec::Codec + PartialEq, NC: FnOnce() -> Result<R, String> + UnwindSafe>(
+        &self,
+        ext: &mut dyn Externalities,
+        runtime_code: &RuntimeCode<'_>,
+        method: &str,
+        data: &[u8],
+        use_native: bool,
+        native_call: Option<NC>,
+    ) -> (Result<NativeOrEncoded<R>, Self::Error>, bool) {
         unimplemented!()
     }
 }
 
-impl<B, Storage> CallExecutor<B> for DummyCallExecutor<B, Storage> where B: BlockT, Storage: LightStorage<B> {
+impl<B, Storage> CallExecutor<B> for DummyCallExecutor<B, Storage>
+where
+    B: BlockT,
+    Storage: LightStorage<B>,
+{
     /// Externalities error type.
     type Error = Error;
 
@@ -108,7 +137,7 @@ impl<B, Storage> CallExecutor<B> for DummyCallExecutor<B, Storage> where B: Bloc
         IB: Fn() -> sp_blockchain::Result<()>,
         EM: Fn(
             Result<NativeOrEncoded<R>, Self::Error>,
-            Result<NativeOrEncoded<R>, Self::Error>
+            Result<NativeOrEncoded<R>, Self::Error>,
         ) -> Result<NativeOrEncoded<R>, Self::Error>,
         R: Encode + Decode + PartialEq,
         NC: FnOnce() -> result::Result<R, String> + UnwindSafe,
@@ -119,15 +148,23 @@ impl<B, Storage> CallExecutor<B> for DummyCallExecutor<B, Storage> where B: Bloc
         method: &str,
         call_data: &[u8],
         changes: &RefCell<OverlayedChanges>,
-        storage_transaction_cache: Option<&RefCell<
-            StorageTransactionCache<B, <Self::Backend as sc_client_api::backend::Backend<B>>::State>,
-        >>,
+        storage_transaction_cache: Option<
+            &RefCell<
+                StorageTransactionCache<
+                    B,
+                    <Self::Backend as sc_client_api::backend::Backend<B>>::State,
+                >,
+            >,
+        >,
         initialize_block: InitializeBlock<'a, B>,
         execution_manager: ExecutionManager<EM>,
         native_call: Option<NC>,
         proof_recorder: &Option<ProofRecorder<B>>,
         extensions: Option<Extensions>,
-    ) -> sp_blockchain::Result<NativeOrEncoded<R>> where ExecutionManager<EM>: Clone {
+    ) -> sp_blockchain::Result<NativeOrEncoded<R>>
+    where
+        ExecutionManager<EM>: Clone,
+    {
         unimplemented!();
     }
 
@@ -146,13 +183,12 @@ impl<B, Storage> CallExecutor<B> for DummyCallExecutor<B, Storage> where B: Bloc
         mut state: S,
         overlay: &mut OverlayedChanges,
         method: &str,
-        call_data: &[u8]
+        call_data: &[u8],
     ) -> Result<(Vec<u8>, StorageProof), sp_blockchain::Error> {
-        let trie_state = state.as_trie_backend()
-            .ok_or_else(||
-                Box::new(sp_state_machine::ExecutionError::UnableToGenerateProof)
-                    as Box<dyn sp_state_machine::Error>
-            )?;
+        let trie_state = state.as_trie_backend().ok_or_else(|| {
+            Box::new(sp_state_machine::ExecutionError::UnableToGenerateProof)
+                as Box<dyn sp_state_machine::Error>
+        })?;
         self.prove_at_trie_state(trie_state, overlay, method, call_data)
     }
 
@@ -164,7 +200,7 @@ impl<B, Storage> CallExecutor<B> for DummyCallExecutor<B, Storage> where B: Bloc
         trie_state: &sp_state_machine::TrieBackend<S, HashFor<B>>,
         overlay: &mut OverlayedChanges,
         method: &str,
-        call_data: &[u8]
+        call_data: &[u8],
     ) -> Result<(Vec<u8>, StorageProof), sp_blockchain::Error> {
         unimplemented!();
     }
