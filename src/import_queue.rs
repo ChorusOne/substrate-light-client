@@ -26,8 +26,8 @@ pub type BlockProcessor<B> = Box<dyn FnMut(IncomingBlock<B>) -> Result<BlockImpo
 pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProcessor<Block>, db::IBCData)> {
     let ibc_data = db::IBCData::decode(&mut encoded_data.as_slice()).unwrap();
 
-    // This dummy genesis provider will panic, So pre-requisite is to have
-    // light authority set inside auxiliary storage beforehand.
+    // This dummy genesis provider will panic, if auxiliary storage
+    // does not contain authority set at LIGHT_AUTHORITY_SET_KEY.
     let dummy_grandpa_genesis_authority_set_provider = DummyGenesisGrandpaAuthoritySetProvider{};
 
     let light_storage = LightStorage::new(DatabaseSettings{
@@ -40,7 +40,7 @@ pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProces
     let light_blockchain = sc_client::light::new_light_blockchain(light_storage);
     let backend = sc_client::light::new_light_backend(light_blockchain.clone());
 
-    // We are never going to execute any extrinsic, so we provide dummy implementation
+    // We are never going to execute any extrinsic, so we use dummy implementation
     let executor: DummyCallExecutor<Block, LightStorage<Block>> = DummyCallExecutor{
         _phantom: PhantomData,
         _phantom2: PhantomData,
@@ -58,7 +58,7 @@ pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProces
         None,
     );
 
-    // Custom Client implementation without runtime
+    // Custom client implementation with dummy runtime
     let client: Arc<Client<_, _, RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>> = Arc::new(Client{
         backend: backend.clone(),
         _phantom: PhantomData,
@@ -67,6 +67,8 @@ pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProces
         aux_store_write_enabled: true,
     });
 
+    // This is to prevent grandpa light import queue to accidentally
+    // re-write authority set
     let read_only_aux_store_client = Arc::new(client.clone_with_read_only_aux_store());
 
     let light_data_checker = Arc::new(
@@ -79,6 +81,10 @@ pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProces
 
     let fetch_checker: Arc<dyn FetchChecker<Block>> = light_data_checker.clone();
 
+    // We need to re-initialize grandpa light import queue because
+    // current version reads authority set from private field instead of
+    // auxiliary storage.
+    // Tracking Upstream PR: https://github.com/paritytech/substrate/pull/5861
     Ok((Box::new(move |incoming_block: IncomingBlock<Block>| {
         let grandpa_block_import = grandpa::light_block_import(
             read_only_aux_store_client.clone(),
