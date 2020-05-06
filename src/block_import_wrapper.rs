@@ -1,5 +1,6 @@
 use crate::common::{
-    NextChangeInAuthority, GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY, NEXT_CHANGE_IN_AUTHORITY_KEY,
+    store_next_authority_change, NextChangeInAuthority, GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY,
+    NEXT_CHANGE_IN_AUTHORITY_KEY,
 };
 use parity_scale_codec::alloc::collections::hash_map::RandomState;
 use parity_scale_codec::alloc::collections::HashMap;
@@ -38,19 +39,6 @@ where
             _phantom_data: PhantomData,
             _phantom_data2: PhantomData,
         }
-    }
-
-    fn store_next_authority_change(
-        &self,
-        next_authority_change: &NextChangeInAuthority<Block>,
-    ) -> Result<(), BlockchainError> {
-        self.aux_store.insert_aux(
-            &[(
-                NEXT_CHANGE_IN_AUTHORITY_KEY,
-                next_authority_change.encode().as_slice(),
-            )],
-            &[],
-        )
     }
 }
 
@@ -95,7 +83,7 @@ where
 
         if should_store_next_authority_change && possible_next_change_in_authority.is_some() {
             let next_change_in_authority = possible_next_change_in_authority.unwrap();
-            self.store_next_authority_change(next_change_in_authority.deref())
+            store_next_authority_change(self.aux_store.clone(), next_change_in_authority.deref())
                 .map_err(|err| Self::Error::Other(Box::new(err)))?;
         }
 

@@ -1,4 +1,7 @@
+use parity_scale_codec::alloc::sync::Arc;
 use parity_scale_codec::{Decode, Encode};
+use sc_client_api::AuxStore;
+use sp_blockchain::Error as BlockchainError;
 use sp_finality_grandpa::{AuthorityList, ScheduledChange};
 use sp_runtime::traits::{Block as BlockT, NumberFor};
 
@@ -56,4 +59,95 @@ where
             change,
         }
     }
+}
+
+pub fn store_next_authority_change<AS, Block>(
+    aux_store: Arc<AS>,
+    next_authority_change: &NextChangeInAuthority<Block>,
+) -> Result<(), BlockchainError>
+where
+    AS: AuxStore,
+    Block: BlockT,
+{
+    aux_store.insert_aux(
+        &[(
+            NEXT_CHANGE_IN_AUTHORITY_KEY,
+            next_authority_change.encode().as_slice(),
+        )],
+        &[],
+    )
+}
+
+pub fn delete_next_authority_change<AS>(aux_store: Arc<AS>) -> Result<(), BlockchainError>
+where
+    AS: AuxStore,
+{
+    aux_store.insert_aux(&[], &[NEXT_CHANGE_IN_AUTHORITY_KEY])
+}
+
+pub fn fetch_next_authority_change<AS, Block>(
+    aux_store: Arc<AS>,
+) -> Result<Option<NextChangeInAuthority<Block>>, BlockchainError>
+where
+    AS: AuxStore,
+    Block: BlockT,
+{
+    let encoded_next_possible_authority_change = aux_store.get_aux(NEXT_CHANGE_IN_AUTHORITY_KEY)?;
+
+    if encoded_next_possible_authority_change.is_none() {
+        return Ok(None);
+    }
+
+    let encoded_authority_change = encoded_next_possible_authority_change.unwrap();
+
+    let next_change_in_authority: NextChangeInAuthority<Block> =
+        NextChangeInAuthority::decode(&mut encoded_authority_change.as_slice()).map_err(|err| {
+            BlockchainError::Backend(format!(
+                "Unable to decode next change in authority. DB might be corrupted. Underlying Error: {}",
+                err.what()
+            ))
+        })?;
+
+    Ok(Some(next_change_in_authority))
+}
+
+pub fn insert_light_authority_set<AS>(
+    aux_store: Arc<AS>,
+    light_authority_set: LightAuthoritySet,
+) -> Result<(), BlockchainError>
+where
+    AS: AuxStore,
+{
+    aux_store.insert_aux(
+        &[(
+            LIGHT_AUTHORITY_SET_KEY,
+            light_authority_set.encode().as_slice(),
+        )],
+        &[],
+    )
+}
+
+pub fn fetch_light_authority_set<AS>(
+    aux_store: Arc<AS>,
+) -> Result<Option<LightAuthoritySet>, BlockchainError>
+where
+    AS: AuxStore,
+{
+    let encoded_possible_light_authority_set = aux_store.get_aux(LIGHT_AUTHORITY_SET_KEY)?;
+
+    if encoded_possible_light_authority_set.is_none() {
+        return Ok(None);
+    }
+
+    let encoded_light_authority_set = encoded_possible_light_authority_set.unwrap();
+
+    let light_authority_set =
+        LightAuthoritySet::decode(&mut encoded_light_authority_set.as_slice()).map_err(|err| {
+            BlockchainError::Backend(format!(
+                "Unable to decode light authority set. DB might be corrupted. Underlying Error: {}",
+                err.what()
+            ))
+        })?;
+
+    Ok(Some(light_authority_set))
 }
