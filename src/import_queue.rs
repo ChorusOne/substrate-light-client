@@ -82,9 +82,8 @@ pub fn setup_block_processor(encoded_data: Vec<u8>) -> ClientResult<(BlockProces
     let fetch_checker: Arc<dyn FetchChecker<Block>> = light_data_checker.clone();
 
     // We need to re-initialize grandpa light import queue because
-    // current version reads authority set from private field instead of
+    // current version read/write authority set from private field instead of
     // auxiliary storage.
-    // Tracking Upstream PR: https://github.com/paritytech/substrate/pull/5861
     Ok((Box::new(move |incoming_block: IncomingBlock<Block>| {
         let grandpa_block_import = grandpa::light_block_import(
             read_only_aux_store_client.clone(),
