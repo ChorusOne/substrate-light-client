@@ -1,14 +1,11 @@
 use crate::common::{
     store_next_authority_change, NextChangeInAuthority, GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY,
-    NEXT_CHANGE_IN_AUTHORITY_KEY,
 };
 use parity_scale_codec::alloc::collections::hash_map::RandomState;
 use parity_scale_codec::alloc::collections::HashMap;
 use parity_scale_codec::alloc::sync::Arc;
-use parity_scale_codec::Encode;
 use sc_client_api::backend::TransactionFor;
 use sc_client_api::{AuxStore, Backend};
-use sp_blockchain::Error as BlockchainError;
 use sp_consensus::{
     BlockCheckParams, BlockImport, BlockImportParams, Error as ConsensusError, ImportResult,
 };
