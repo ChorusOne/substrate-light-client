@@ -12,6 +12,7 @@ use sp_finality_grandpa::{ConsensusLog, ScheduledChange, GRANDPA_ENGINE_ID};
 use sp_runtime::generic::OpaqueDigestItemId;
 use sp_runtime::traits::Header;
 use sp_runtime::traits::{Block as BlockT, NumberFor};
+use std::marker::PhantomData;
 
 fn find_scheduled_change<B: BlockT>(header: &B::Header) -> Option<ScheduledChange<NumberFor<B>>> {
     let id = OpaqueDigestItemId::Consensus(&GRANDPA_ENGINE_ID);
@@ -28,22 +29,86 @@ fn find_scheduled_change<B: BlockT>(header: &B::Header) -> Option<ScheduledChang
         .convert_first(|l| l.try_to(id).and_then(filter_log))
 }
 
-pub struct GrandpaVerifier<Client> {
+pub struct GrandpaVerifier<Client, Block> {
     client: Arc<Client>,
+    _phantom: PhantomData<Block>,
 }
 
-impl<Client> GrandpaVerifier<Client>
+impl<Block, Client> GrandpaVerifier<Client, Block>
 where
     Client: AuxStore + Send + Sync,
+    Block: BlockT,
 {
     pub fn new(client: Arc<Client>) -> Self {
         Self {
             client: client.clone(),
+            _phantom: PhantomData,
         }
+    }
+
+    pub fn insert_authority_set(
+        &self,
+        light_authority_set: LightAuthoritySet,
+    ) -> Result<(), String> {
+        self.client
+            .insert_aux(
+                &[(
+                    LIGHT_AUTHORITY_SET_KEY,
+                    light_authority_set.encode().as_slice(),
+                )],
+                &[],
+            )
+            .map_err(|err| format!("{}", err))
+    }
+
+    pub fn fetch_stored_authority_set(&self) -> Result<Option<LightAuthoritySet>, String> {
+        let encoded_possible_light_authority_set = self
+            .client
+            .get_aux(LIGHT_AUTHORITY_SET_KEY)
+            .map_err(|err| format!("{}", err))?;
+
+        if encoded_possible_light_authority_set.is_none() {
+            return Ok(None);
+        }
+
+        let encoded_light_authority_set = encoded_possible_light_authority_set.unwrap();
+
+        let light_authority_set =
+            LightAuthoritySet::decode(&mut encoded_light_authority_set.as_slice())
+                .map_err(|err| format!("{}", err))?;
+
+        Ok(Some(light_authority_set))
+    }
+
+    pub fn delete_stored_next_authority_change(&self) -> Result<(), String> {
+        self.client
+            .insert_aux(&[], &[NEXT_CHANGE_IN_AUTHORITY_KEY])
+            .map_err(|err| format!("{}", err))
+    }
+
+    pub fn fetch_stored_next_authority_change(
+        &self,
+    ) -> Result<Option<NextChangeInAuthority<Block>>, String> {
+        let encoded_next_possible_authority_change = self
+            .client
+            .get_aux(NEXT_CHANGE_IN_AUTHORITY_KEY)
+            .map_err(|err| format!("{}", err))?;
+
+        if encoded_next_possible_authority_change.is_none() {
+            return Ok(None);
+        }
+
+        let encoded_authority_change = encoded_next_possible_authority_change.unwrap();
+
+        let next_change_in_authority: NextChangeInAuthority<Block> =
+            NextChangeInAuthority::decode(&mut encoded_authority_change.as_slice())
+                .map_err(|err| format!("{}", err))?;
+
+        Ok(Some(next_change_in_authority))
     }
 }
 
-impl<Block, Client> Verifier<Block> for GrandpaVerifier<Client>
+impl<Block, Client> Verifier<Block> for GrandpaVerifier<Client, Block>
 where
     Client: AuxStore + Send + Sync,
     Block: BlockT,
@@ -62,20 +127,12 @@ where
         String,
     > {
         let (possible_authority_change, scheduled_change_exists) = {
-            let encoded_possible_authority_change = self
-                .client
-                .get_aux(NEXT_CHANGE_IN_AUTHORITY_KEY)
-                .map_err(|err| format!("{}", err))?;
-            match encoded_possible_authority_change {
-                Some(encoded_authority_change) => {
-                    let next_change_in_authority: NextChangeInAuthority<Block> =
-                        NextChangeInAuthority::decode(&mut encoded_authority_change.as_slice())
-                            .map_err(|err| format!("{}", err))?;
-                    if next_change_in_authority.next_change_at == *header.number() {
-                        self.client
-                            .insert_aux(&[], &[NEXT_CHANGE_IN_AUTHORITY_KEY])
-                            .map_err(|err| format!("{}", err))?;
-                        (Some(next_change_in_authority), false)
+            let possible_authority_change = self.fetch_stored_next_authority_change()?;
+            match possible_authority_change {
+                Some(authority_change) => {
+                    if authority_change.next_change_at == *header.number() {
+                        self.delete_stored_next_authority_change()?;
+                        (Some(authority_change), false)
                     } else {
                         (None, true)
                     }
@@ -110,32 +167,17 @@ where
         }
 
         if let Some(authority_change) = possible_authority_change {
-            let possible_encoded_light_authority_set = self
-                .client
-                .get_aux(LIGHT_AUTHORITY_SET_KEY)
-                .map_err(|err| format!("{}", err))?;
-            let prev_authority_set = if possible_encoded_light_authority_set.is_none() {
+            let possible_current_authority_set = self.fetch_stored_authority_set()?;
+            let current_authority_set = if possible_current_authority_set.is_none() {
                 Err("No previous authority set found")
             } else {
-                Ok(LightAuthoritySet::decode(
-                    &mut possible_encoded_light_authority_set.unwrap().as_slice(),
-                )
-                .map_err(|err| format!("{}", err))?)
+                Ok(possible_current_authority_set.unwrap())
             }?;
             let next_authority_set = LightAuthoritySet::construct_next_authority_set(
-                &prev_authority_set,
+                &current_authority_set,
                 authority_change.change.next_authorities,
             );
-            self.client
-                .insert_aux(
-                    &[(
-                        LIGHT_AUTHORITY_SET_KEY,
-                        next_authority_set.encode().as_slice(),
-                    )],
-                    &[],
-                )
-                .map_err(|err| format!("{}", err))
-                .map_err(|err| format!("{}", err))?;
+            self.insert_authority_set(next_authority_set)?;
         }
 
         Ok((block_import_params, None))

@@ -86,30 +86,29 @@ pub fn setup_block_processor(
     // We need to re-initialize grandpa light import queue because
     // current version read/write authority set from private field instead of
     // auxiliary storage.
-    Ok((
-        Box::new(move |incoming_block: IncomingBlock<Block>| {
-            let grandpa_block_import = grandpa::light_block_import(
-                read_only_aux_store_client.clone(),
-                backend.clone(),
-                &dummy_grandpa_genesis_authority_set_provider,
-                Arc::new(fetch_checker.clone()),
-            )
-            .map_err(|e| format!("{}", e))?;
-            let mut grandpa_verifier = GrandpaVerifier::new(client.clone());
-            let mut block_import_wrapper: BlockImportWrapper<
-                _,
-                Block,
-                Backend<LightStorage<Block>, BlakeTwo256>,
-                _,
-            > = BlockImportWrapper::new(grandpa_block_import.clone(), client.clone());
-            import_single_block(
-                &mut block_import_wrapper,
-                BlockOrigin::NetworkBroadcast,
-                incoming_block,
-                &mut grandpa_verifier,
-            )
-            .map_err(|e| format!("{:?}", e))
-        }),
-        ibc_data,
-    ))
+    let block_processor_fn = Box::new(move |incoming_block: IncomingBlock<Block>| {
+        let grandpa_block_import = grandpa::light_block_import(
+            read_only_aux_store_client.clone(),
+            backend.clone(),
+            &dummy_grandpa_genesis_authority_set_provider,
+            Arc::new(fetch_checker.clone()),
+        )
+        .map_err(|e| format!("{}", e))?;
+        let mut grandpa_verifier = GrandpaVerifier::new(client.clone());
+        let mut block_import_wrapper: BlockImportWrapper<
+            _,
+            Block,
+            Backend<LightStorage<Block>, BlakeTwo256>,
+            _,
+        > = BlockImportWrapper::new(grandpa_block_import.clone(), client.clone());
+        import_single_block(
+            &mut block_import_wrapper,
+            BlockOrigin::NetworkBroadcast,
+            incoming_block,
+            &mut grandpa_verifier,
+        )
+        .map_err(|e| format!("{:?}", e))
+    });
+
+    Ok((block_processor_fn, ibc_data))
 }
