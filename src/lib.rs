@@ -4,12 +4,12 @@ mod common;
 mod db;
 mod dummy_objs;
 mod genesis;
-mod import_queue;
+mod block_processor;
 mod runtime;
 mod types;
 mod verifier;
 
-use crate::import_queue::setup_block_processor;
+use crate::block_processor::setup_block_processor;
 use crate::types::{Block, Header};
 use sp_consensus::import_queue::{BlockImportResult, IncomingBlock};
 use sp_runtime::traits::NumberFor;

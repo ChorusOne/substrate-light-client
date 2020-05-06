@@ -1,12 +1,10 @@
 use crate::common::{
     delete_next_authority_change, fetch_light_authority_set, fetch_next_authority_change,
     insert_light_authority_set, LightAuthoritySet, NextChangeInAuthority,
-    GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY, LIGHT_AUTHORITY_SET_KEY,
-    NEXT_CHANGE_IN_AUTHORITY_KEY,
+    GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY,
 };
 use parity_scale_codec::alloc::borrow::Cow;
 use parity_scale_codec::alloc::sync::Arc;
-use parity_scale_codec::{Decode, Encode};
 use sc_client_api::AuxStore;
 use sp_consensus::import_queue::Verifier;
 use sp_consensus::{BlockImportParams, BlockOrigin};
@@ -14,7 +12,6 @@ use sp_finality_grandpa::{ConsensusLog, ScheduledChange, GRANDPA_ENGINE_ID};
 use sp_runtime::generic::OpaqueDigestItemId;
 use sp_runtime::traits::Header;
 use sp_runtime::traits::{Block as BlockT, NumberFor};
-use std::marker::PhantomData;
 
 fn find_scheduled_change<B: BlockT>(header: &B::Header) -> Option<ScheduledChange<NumberFor<B>>> {
     let id = OpaqueDigestItemId::Consensus(&GRANDPA_ENGINE_ID);
