@@ -1,8 +1,8 @@
 use crate::block_import_wrapper::BlockImportWrapper;
 use crate::client::Client;
 use crate::db;
-use crate::dummy_objs::{DummyGenesisGrandpaAuthoritySetProvider, DummyFetchChecker};
 use crate::dummy_objs::DummyCallExecutor;
+use crate::dummy_objs::{DummyFetchChecker, DummyGenesisGrandpaAuthoritySetProvider};
 use crate::runtime::RuntimeApiConstructor;
 use crate::types::Block;
 use crate::verifier::GrandpaVerifier;
@@ -77,7 +77,7 @@ pub fn setup_block_processor(
 
     // Since, we don't handle finality proof inside grandpa light import queue,
     // we don't need concrete implementation of FetchChecker trait.
-    let fetch_checker: Arc<dyn FetchChecker<Block>> = Arc::new(DummyFetchChecker{});
+    let fetch_checker: Arc<dyn FetchChecker<Block>> = Arc::new(DummyFetchChecker {});
 
     // We need to re-initialize grandpa light import queue because
     // current version read/write authority set from private field instead of

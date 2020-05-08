@@ -3,23 +3,26 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::panic::UnwindSafe;
 
+use parity_scale_codec::alloc::collections::HashMap;
 use parity_scale_codec::{Decode, Encode};
 use sc_client::{CallExecutor, ExecutionStrategy, StorageProof};
 use sc_client_api::light::Storage as LightStorage;
+use sc_client_api::{
+    ChangesProof, FetchChecker, RemoteBodyRequest, RemoteCallRequest, RemoteChangesRequest,
+    RemoteHeaderRequest, RemoteReadChildRequest, RemoteReadRequest,
+};
 use sc_finality_grandpa::GenesisAuthoritySetProvider;
 use sp_api::{
     InitializeBlock, NativeOrEncoded, OverlayedChanges, ProofRecorder, StorageTransactionCache,
 };
 use sp_blockchain::Error;
+use sp_blockchain::Error as ClientError;
 use sp_externalities::Extensions;
 use sp_finality_grandpa::AuthorityList;
 use sp_runtime::generic::BlockId;
 use sp_runtime::traits::{Block as BlockT, HashFor, NumberFor};
 use sp_state_machine::ExecutionManager;
 use sp_version::{NativeVersion, RuntimeVersion};
-use sc_client_api::{FetchChecker, RemoteHeaderRequest, RemoteReadRequest, RemoteReadChildRequest, RemoteCallRequest, RemoteChangesRequest, ChangesProof, RemoteBodyRequest};
-use parity_scale_codec::alloc::collections::HashMap;
-use sp_blockchain::Error as ClientError;
 
 #[derive(Clone)]
 pub struct DummyGenesisGrandpaAuthoritySetProvider {}
@@ -50,7 +53,7 @@ impl<Block: BlockT> FetchChecker<Block> for DummyFetchChecker {
         &self,
         _request: &RemoteReadRequest<Block::Header>,
         _remote_proof: StorageProof,
-    ) -> Result<HashMap<Vec<u8>,Option<Vec<u8>>>, ClientError> {
+    ) -> Result<HashMap<Vec<u8>, Option<Vec<u8>>>, ClientError> {
         Err(ClientError::Msg("AlwaysBadChecker".into()))
     }
 
@@ -73,7 +76,7 @@ impl<Block: BlockT> FetchChecker<Block> for DummyFetchChecker {
     fn check_changes_proof(
         &self,
         _request: &RemoteChangesRequest<Block::Header>,
-        _remote_proof: ChangesProof<Block::Header>
+        _remote_proof: ChangesProof<Block::Header>,
     ) -> Result<Vec<(NumberFor<Block>, u32)>, ClientError> {
         Err(ClientError::Msg("AlwaysBadChecker".into()))
     }
@@ -81,7 +84,7 @@ impl<Block: BlockT> FetchChecker<Block> for DummyFetchChecker {
     fn check_body_proof(
         &self,
         _request: &RemoteBodyRequest<Block::Header>,
-        _body: Vec<Block::Extrinsic>
+        _body: Vec<Block::Extrinsic>,
     ) -> Result<Vec<Block::Extrinsic>, ClientError> {
         Err(ClientError::Msg("AlwaysBadChecker".into()))
     }
