@@ -158,7 +158,6 @@ mod tests {
 
     use kvdb::KeyValueDB;
     use parity_scale_codec::{Decode, Encode};
-    use sc_consensus_babe::{AuthorityId as BabeAuthorityId, BabeConfiguration};
     use sp_core::crypto::Public;
     use sp_finality_grandpa::AuthorityId;
 
@@ -197,14 +196,6 @@ mod tests {
             genesis_data: GenesisData {
                 grandpa_authority_set_id: 2,
                 grandpa_authority_set: vec![(AuthorityId::from_slice(&[1; 32]), 5)],
-                babe_configuration: BabeConfiguration {
-                    slot_duration: 0,
-                    epoch_length: 0,
-                    c: (0, 0),
-                    genesis_authorities: vec![],
-                    randomness: [1; 32],
-                    secondary_slots: false,
-                },
             },
         };
 
@@ -276,14 +267,6 @@ mod tests {
             genesis_data: GenesisData {
                 grandpa_authority_set_id: 2,
                 grandpa_authority_set: vec![(AuthorityId::from_slice(&[1; 32]), 5)],
-                babe_configuration: BabeConfiguration {
-                    slot_duration: 1,
-                    epoch_length: 1,
-                    c: (0, 0),
-                    genesis_authorities: vec![],
-                    randomness: [1; 32],
-                    secondary_slots: false,
-                },
             },
         };
 
@@ -318,11 +301,6 @@ mod tests {
             (AuthorityId::from_slice(&[2; 32]), 45),
         ];
         ibc_data.genesis_data.grandpa_authority_set_id = 521;
-        ibc_data.genesis_data.babe_configuration.epoch_length = 42;
-        ibc_data.genesis_data.babe_configuration.genesis_authorities = vec![
-            (BabeAuthorityId::from_slice(&[5; 32]), 5),
-            (BabeAuthorityId::from_slice(&[2; 32]), 45),
-        ];
 
         // Insert into an instance created from previous state of original db
         assert!(decoded_ibc_data.db.write(duplicate_transaction).is_ok());
@@ -331,17 +309,6 @@ mod tests {
             (AuthorityId::from_slice(&[2; 32]), 45),
         ];
         decoded_ibc_data.genesis_data.grandpa_authority_set_id = 521;
-        decoded_ibc_data
-            .genesis_data
-            .babe_configuration
-            .epoch_length = 42;
-        decoded_ibc_data
-            .genesis_data
-            .babe_configuration
-            .genesis_authorities = vec![
-            (BabeAuthorityId::from_slice(&[5; 32]), 5),
-            (BabeAuthorityId::from_slice(&[2; 32]), 45),
-        ];
 
         assert_eq!(
             ibc_data.encode().as_slice(),
