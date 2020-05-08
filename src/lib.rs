@@ -36,6 +36,5 @@ fn ingest_finalized_header(
 
     // We aren't returning updated db data from block processor function directly, because
     // in future we might want to call it for multiple blocks per tx.
-    let block_import_result = block_processor_fn(incoming_block)?;
-    Ok((block_import_result, ibc_data.encode()))
+    Ok((block_processor_fn(incoming_block)?, ibc_data.encode()))
 }
