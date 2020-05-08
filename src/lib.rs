@@ -16,7 +16,7 @@ use sp_runtime::traits::NumberFor;
 use sp_runtime::Justification;
 use parity_scale_codec::Encode;
 
-// WASM entry point
+// WASM entry point need to call this function
 fn ingest_finalized_header(
     encoded_data: Vec<u8>,
     finalized_header: Header,
