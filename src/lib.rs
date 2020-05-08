@@ -1,20 +1,20 @@
 mod block_import_wrapper;
+mod block_processor;
 mod client;
 mod common;
 mod db;
 mod dummy_objs;
 mod genesis;
-mod block_processor;
 mod runtime;
 mod types;
 mod verifier;
 
 use crate::block_processor::setup_block_processor;
 use crate::types::{Block, Header};
+use parity_scale_codec::Encode;
 use sp_consensus::import_queue::{BlockImportResult, IncomingBlock};
 use sp_runtime::traits::NumberFor;
 use sp_runtime::Justification;
-use parity_scale_codec::Encode;
 
 // WASM entry point need to call this function
 fn ingest_finalized_header(
