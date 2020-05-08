@@ -86,7 +86,7 @@ impl<Block: BlockT> FetchChecker<Block> for DummyFetchChecker {
         _request: &RemoteBodyRequest<Block::Header>,
         _body: Vec<Block::Extrinsic>,
     ) -> Result<Vec<Block::Extrinsic>, ClientError> {
-       unimplemented!()
+        unimplemented!()
     }
 }
 
