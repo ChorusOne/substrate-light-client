@@ -413,7 +413,7 @@ where
             let info = self.backend.blockchain().info();
 
             // the block is lower than our last best block or not child of last best block,
-            // So it must refuse to import.
+            // So We must refuse to import.
             if *header.number() <= info.best_number || *parent_hash != info.best_hash {
                 return Err(BlockchainError::NotInFinalizedChain);
             }
