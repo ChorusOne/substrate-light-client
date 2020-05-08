@@ -46,7 +46,7 @@ impl<Block: BlockT> FetchChecker<Block> for DummyFetchChecker {
         _remote_header: Option<Block::Header>,
         _remote_proof: StorageProof,
     ) -> Result<Block::Header, ClientError> {
-        Err(ClientError::Msg("AlwaysBadChecker".into()))
+        unimplemented!()
     }
 
     fn check_read_proof(
@@ -54,7 +54,7 @@ impl<Block: BlockT> FetchChecker<Block> for DummyFetchChecker {
         _request: &RemoteReadRequest<Block::Header>,
         _remote_proof: StorageProof,
     ) -> Result<HashMap<Vec<u8>, Option<Vec<u8>>>, ClientError> {
-        Err(ClientError::Msg("AlwaysBadChecker".into()))
+        unimplemented!()
     }
 
     fn check_read_child_proof(
@@ -62,7 +62,7 @@ impl<Block: BlockT> FetchChecker<Block> for DummyFetchChecker {
         _request: &RemoteReadChildRequest<Block::Header>,
         _remote_proof: StorageProof,
     ) -> Result<HashMap<Vec<u8>, Option<Vec<u8>>>, ClientError> {
-        Err(ClientError::Msg("AlwaysBadChecker".into()))
+        unimplemented!()
     }
 
     fn check_execution_proof(
@@ -70,7 +70,7 @@ impl<Block: BlockT> FetchChecker<Block> for DummyFetchChecker {
         _request: &RemoteCallRequest<Block::Header>,
         _remote_proof: StorageProof,
     ) -> Result<Vec<u8>, ClientError> {
-        Err(ClientError::Msg("AlwaysBadChecker".into()))
+        unimplemented!()
     }
 
     fn check_changes_proof(
@@ -78,7 +78,7 @@ impl<Block: BlockT> FetchChecker<Block> for DummyFetchChecker {
         _request: &RemoteChangesRequest<Block::Header>,
         _remote_proof: ChangesProof<Block::Header>,
     ) -> Result<Vec<(NumberFor<Block>, u32)>, ClientError> {
-        Err(ClientError::Msg("AlwaysBadChecker".into()))
+        unimplemented!()
     }
 
     fn check_body_proof(
@@ -86,7 +86,7 @@ impl<Block: BlockT> FetchChecker<Block> for DummyFetchChecker {
         _request: &RemoteBodyRequest<Block::Header>,
         _body: Vec<Block::Extrinsic>,
     ) -> Result<Vec<Block::Extrinsic>, ClientError> {
-        Err(ClientError::Msg("AlwaysBadChecker".into()))
+       unimplemented!()
     }
 }
 
