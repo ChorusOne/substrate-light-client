@@ -412,9 +412,9 @@ where
 
             let info = self.backend.blockchain().info();
 
-            // the block is lower than our last finalized block so it must revert
-            // finality, refusing import.
-            if *header.number() <= info.finalized_number {
+            // the block is lower than our last best block or not child of last best block,
+            // So it must refuse to import.
+            if *header.number() <= info.best_number || *parent_hash != info.best_hash {
                 return Err(BlockchainError::NotInFinalizedChain);
             }
 
@@ -422,7 +422,8 @@ where
                 header.clone(),
                 body,
                 justification,
-                NewBlockState::Normal,
+                // It's always best as we are only interested in one fork
+                NewBlockState::Best,
             )?;
 
             Ok(ImportResult::imported(false))
