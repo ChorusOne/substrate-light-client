@@ -426,7 +426,7 @@ where
                 NewBlockState::Best,
             )?;
 
-            Ok(ImportResult::imported(false))
+            Ok(ImportResult::imported(true))
         })
         .map_err(|e| ConsensusError::ClientImport(e.to_string()).into())
     }
