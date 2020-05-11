@@ -27,6 +27,12 @@ use sp_consensus::import_queue::{BlockImportResult, IncomingBlock};
 use sp_runtime::traits::{Block as BlockT, NumberFor};
 use sp_runtime::Justification;
 
+pub mod contract;
+pub mod msg;
+
+#[cfg(test)]
+mod tests;
+
 // WASM entry point need to call this function
 pub fn initialize_db(
     initial_header: Header,
@@ -859,5 +865,47 @@ mod tests {
         write_test_flow(format!("\n\n"));
         assert_finalized_header(encoded_data.clone(), &fifth_header, 1);
         write_test_flow(format!("third, fourth and fifth headers are now finalized"));
+    }
+}
+
+
+
+/** Below we expose wasm exports **/
+#[cfg(target_arch = "wasm32")]
+pub use cosmwasm::exports::{allocate, deallocate};
+
+#[cfg(target_arch = "wasm32")]
+pub use wasm::{handle, init, query};
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use super::contract;
+    use cosmwasm::{exports, imports};
+    use std::ffi::c_void;
+
+    #[no_mangle]
+    pub extern "C" fn init(params_ptr: *mut c_void, msg_ptr: *mut c_void) -> *mut c_void {
+        exports::do_init(
+            &contract::init::<imports::ExternalStorage, imports::ExternalApi>,
+            params_ptr,
+            msg_ptr,
+        )
+    }
+
+    #[no_mangle]
+    pub extern "C" fn handle(params_ptr: *mut c_void, msg_ptr: *mut c_void) -> *mut c_void {
+        exports::do_handle(
+            &contract::handle::<imports::ExternalStorage, imports::ExternalApi>,
+            params_ptr,
+            msg_ptr,
+        )
+    }
+
+    #[no_mangle]
+    pub extern "C" fn query(msg_ptr: *mut c_void) -> *mut c_void {
+        exports::do_query(
+            &contract::query::<imports::ExternalStorage, imports::ExternalApi>,
+            msg_ptr,
+        )
     }
 }
