@@ -402,6 +402,7 @@ where
             }
 
             let hash = header.hash();
+            let parent_hash = header.parent_hash();
             let status: BlockStatus = self.backend.blockchain().status(BlockId::Hash(hash))?;
 
             match status {
