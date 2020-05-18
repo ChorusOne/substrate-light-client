@@ -10,11 +10,35 @@ mod types;
 mod verifier;
 
 use crate::block_processor::setup_block_processor;
+use crate::common::{initialize_backend, insert_light_authority_set, LightAuthoritySet};
+use crate::db::create;
+use crate::genesis::GenesisData;
 use crate::types::{Block, Header};
 use parity_scale_codec::Encode;
+use sp_blockchain::Error as BlockchainError;
 use sp_consensus::import_queue::{BlockImportResult, IncomingBlock};
 use sp_runtime::traits::NumberFor;
 use sp_runtime::Justification;
+
+// WASM entry point need to call this function
+fn initialize_db(
+    initial_header: Header,
+    justification: Justification,
+    initial_authority_set: LightAuthoritySet,
+) -> Result<Vec<u8>, BlockchainError> {
+    let db = create(11);
+    let new_ibc_data = crate::db::IBCData {
+        db,
+        genesis_data: GenesisData {},
+    };
+    let empty_data = new_ibc_data.encode();
+    let (backend, ibc_data) = initialize_backend(empty_data)?;
+    insert_light_authority_set(backend, initial_authority_set)?;
+
+    // Ingest root of trust header
+
+    Ok(ibc_data.encode())
+}
 
 // WASM entry point need to call this function
 fn ingest_finalized_header(
