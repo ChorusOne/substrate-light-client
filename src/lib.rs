@@ -21,11 +21,11 @@ use sp_blockchain::Error as BlockchainError;
 use sp_consensus::import_queue::{BlockImportResult, IncomingBlock};
 use sp_runtime::traits::NumberFor;
 use sp_runtime::Justification;
+use sc_client_api::{Backend, BlockImportOperation, NewBlockState};
 
 // WASM entry point need to call this function
 fn initialize_db(
     initial_header: Header,
-    justification: Justification,
     initial_authority_set: LightAuthoritySet,
 ) -> Result<Vec<u8>, BlockchainError> {
     let db = create(NUM_COLUMNS);
@@ -34,10 +34,13 @@ fn initialize_db(
         genesis_data: GenesisData {},
     };
     let empty_data = new_ibc_data.encode();
-    let (backend, ibc_data) = initialize_backend(empty_data)?;
-    insert_light_authority_set(backend, initial_authority_set)?;
+    let (mut backend, ibc_data) = initialize_backend(empty_data)?;
+    insert_light_authority_set(backend.clone(), initial_authority_set)?;
 
-    // Ingest root of trust header
+    // Ingest initial header
+    let mut backend_op = backend.begin_operation()?;
+    backend_op.set_block_data(initial_header, None, None, NewBlockState::Best)?;
+    backend.commit_operation(backend_op)?;
 
     Ok(ibc_data.encode())
 }
