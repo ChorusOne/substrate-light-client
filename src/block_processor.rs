@@ -91,12 +91,8 @@ pub fn setup_block_processor(
         )
         .map_err(|e| format!("{}", e))?;
         let mut grandpa_verifier = GrandpaVerifier::new(client.clone());
-        let mut block_import_wrapper: BlockImportWrapper<
-            _,
-            Block,
-            Backend<LightStorage<Block>, BlakeTwo256>,
-            _,
-        > = BlockImportWrapper::new(grandpa_block_import.clone(), client.clone());
+        let mut block_import_wrapper: BlockImportWrapper<_, _> =
+            BlockImportWrapper::new(grandpa_block_import.clone(), client.clone());
         import_single_block(
             &mut block_import_wrapper,
             BlockOrigin::NetworkBroadcast,

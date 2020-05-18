@@ -4,50 +4,37 @@ use crate::common::{
 use parity_scale_codec::alloc::collections::hash_map::RandomState;
 use parity_scale_codec::alloc::collections::HashMap;
 use parity_scale_codec::alloc::sync::Arc;
-use sc_client_api::backend::TransactionFor;
-use sc_client_api::{AuxStore, Backend};
+use sc_client_api::AuxStore;
 use sp_consensus::{
     BlockCheckParams, BlockImport, BlockImportParams, Error as ConsensusError, ImportResult,
 };
 use sp_runtime::traits::Block as BlockT;
-use std::marker::PhantomData;
 use std::ops::Deref;
 
 // Wrapper around grandpa block import, which is mainly used to do
 // some ibc client specific book-keeping.
-pub struct BlockImportWrapper<Inner, Block, Backend, AuxStore> {
+pub struct BlockImportWrapper<Inner, AuxStore> {
     wrapped_block_import: Inner,
     aux_store: Arc<AuxStore>,
-    _phantom_data: PhantomData<Block>,
-    _phantom_data2: PhantomData<Backend>,
 }
 
-impl<Inner, Block, BE, AS> BlockImportWrapper<Inner, Block, BE, AS>
-where
-    Block: BlockT,
-    BE: Backend<Block>,
-    Inner: BlockImport<Block, Error = ConsensusError, Transaction = TransactionFor<BE, Block>>,
-    AS: AuxStore,
-{
-    pub fn new(wrapped_block_import: Inner, aux_store: Arc<AS>) -> Self {
+impl<Inner, AuxStore> BlockImportWrapper<Inner, AuxStore> {
+    pub fn new(wrapped_block_import: Inner, aux_store: Arc<AuxStore>) -> Self {
         Self {
             wrapped_block_import,
             aux_store,
-            _phantom_data: PhantomData,
-            _phantom_data2: PhantomData,
         }
     }
 }
 
-impl<Inner, Block, BE, AS> BlockImport<Block> for BlockImportWrapper<Inner, Block, BE, AS>
+impl<Block, Inner, AS> BlockImport<Block> for BlockImportWrapper<Inner, AS>
 where
-    Block: BlockT,
-    BE: Backend<Block>,
-    Inner: BlockImport<Block, Error = ConsensusError, Transaction = TransactionFor<BE, Block>>,
     AS: AuxStore,
+    Block: BlockT,
+    Inner: BlockImport<Block, Error = ConsensusError>, //, Transaction = TransactionFor<BE, Block>>,
 {
     type Error = ConsensusError;
-    type Transaction = TransactionFor<BE, Block>;
+    type Transaction = Inner::Transaction;
 
     fn check_block(&mut self, block: BlockCheckParams<Block>) -> Result<ImportResult, Self::Error> {
         self.wrapped_block_import.check_block(block)
