@@ -193,10 +193,7 @@ mod tests {
 
         let ibc_data = IBCData {
             db,
-            genesis_data: GenesisData {
-                grandpa_authority_set_id: 2,
-                grandpa_authority_set: vec![(AuthorityId::from_slice(&[1; 32]), 5)],
-            },
+            genesis_data: GenesisData {},
         };
 
         let encoded_ibc_data = ibc_data.encode();
@@ -207,12 +204,6 @@ mod tests {
         assert_eq!(decoded_db.get(0, b"key1").unwrap().unwrap(), b"horse");
         assert_eq!(decoded_db.get(1, b"key2").unwrap().unwrap(), b"pigeon");
         assert_eq!(decoded_db.get(1, b"key3").unwrap().unwrap(), b"cat");
-
-        assert_eq!(decoded_ibc_data.genesis_data.grandpa_authority_set_id, 2);
-        assert_eq!(
-            decoded_ibc_data.genesis_data.grandpa_authority_set,
-            vec![(AuthorityId::from_slice(&[1; 32]), 5)]
-        );
     }
 
     #[test]
@@ -264,10 +255,7 @@ mod tests {
 
         let mut ibc_data = IBCData {
             db,
-            genesis_data: GenesisData {
-                grandpa_authority_set_id: 2,
-                grandpa_authority_set: vec![(AuthorityId::from_slice(&[1; 32]), 5)],
-            },
+            genesis_data: GenesisData {},
         };
 
         // First test: If two IBCData instance are identical, their
@@ -296,19 +284,9 @@ mod tests {
         let duplicate_transaction = transaction.clone();
         // Insert into original db
         assert!(ibc_data.db.write(transaction).is_ok());
-        ibc_data.genesis_data.grandpa_authority_set = vec![
-            (AuthorityId::from_slice(&[5; 32]), 5),
-            (AuthorityId::from_slice(&[2; 32]), 45),
-        ];
-        ibc_data.genesis_data.grandpa_authority_set_id = 521;
 
         // Insert into an instance created from previous state of original db
         assert!(decoded_ibc_data.db.write(duplicate_transaction).is_ok());
-        decoded_ibc_data.genesis_data.grandpa_authority_set = vec![
-            (AuthorityId::from_slice(&[5; 32]), 5),
-            (AuthorityId::from_slice(&[2; 32]), 45),
-        ];
-        decoded_ibc_data.genesis_data.grandpa_authority_set_id = 521;
 
         assert_eq!(
             ibc_data.encode().as_slice(),

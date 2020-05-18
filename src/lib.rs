@@ -24,7 +24,7 @@ use sp_runtime::traits::NumberFor;
 use sp_runtime::Justification;
 
 // WASM entry point need to call this function
-fn initialize_db(
+pub fn initialize_db(
     initial_header: Header,
     initial_authority_set: LightAuthoritySet,
 ) -> Result<Vec<u8>, BlockchainError> {
@@ -46,7 +46,7 @@ fn initialize_db(
 }
 
 // WASM entry point need to call this function
-fn ingest_finalized_header(
+pub fn ingest_finalized_header(
     encoded_data: Vec<u8>,
     finalized_header: Header,
     justification: Option<Justification>,
@@ -66,4 +66,26 @@ fn ingest_finalized_header(
     // We aren't returning updated db data from block processor function directly, because
     // in future we might want to call it for multiple blocks per tx.
     Ok((block_processor_fn(incoming_block)?, ibc_data.encode()))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::common::LightAuthoritySet;
+    use crate::initialize_db;
+    use crate::types::Header;
+    use sp_runtime::traits::{Header as HeaderT, One};
+
+    #[test]
+    fn test_initialize_db() {
+        let initial_header = Header::new(
+            One::one(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+
+        let data = initialize_db(initial_header, LightAuthoritySet::new(0, vec![])).unwrap();
+        assert!(data.len() > 0);
+    }
 }
