@@ -14,6 +14,9 @@ use sp_runtime::traits::{Block as BlockT, HashFor, NumberFor};
 pub const NEXT_CHANGE_IN_AUTHORITY_KEY: &'static [u8] = b"ibc_nca";
 pub static GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY: &[u8] = b"grandpa_nca";
 
+// Columns supported in our in memory db
+pub const NUM_COLUMNS: u32 = 11;
+
 /// LightAuthoritySet is saved under this key in aux storage.
 pub const LIGHT_AUTHORITY_SET_KEY: &[u8] = b"grandpa_voters";
 /// Latest authority set tracker.

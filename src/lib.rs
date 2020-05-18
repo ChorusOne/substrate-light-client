@@ -10,7 +10,9 @@ mod types;
 mod verifier;
 
 use crate::block_processor::setup_block_processor;
-use crate::common::{initialize_backend, insert_light_authority_set, LightAuthoritySet};
+use crate::common::{
+    initialize_backend, insert_light_authority_set, LightAuthoritySet, NUM_COLUMNS,
+};
 use crate::db::create;
 use crate::genesis::GenesisData;
 use crate::types::{Block, Header};
@@ -26,7 +28,7 @@ fn initialize_db(
     justification: Justification,
     initial_authority_set: LightAuthoritySet,
 ) -> Result<Vec<u8>, BlockchainError> {
-    let db = create(11);
+    let db = create(NUM_COLUMNS);
     let new_ibc_data = crate::db::IBCData {
         db,
         genesis_data: GenesisData {},
