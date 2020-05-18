@@ -1,17 +1,16 @@
 use crate::block_import_wrapper::BlockImportWrapper;
 use crate::client::Client;
+use crate::common::initialize_backend;
 use crate::db;
 use crate::dummy_objs::DummyCallExecutor;
 use crate::dummy_objs::{DummyFetchChecker, DummyGenesisGrandpaAuthoritySetProvider};
 use crate::runtime::RuntimeApiConstructor;
 use crate::types::Block;
 use crate::verifier::GrandpaVerifier;
-use parity_scale_codec::Decode;
 use sc_chain_spec::{ChainType, GenericChainSpec, NoExtension};
 use sc_client::light::backend::Backend;
 use sc_client_api::FetchChecker;
 use sc_client_db::light::LightStorage;
-use sc_client_db::{DatabaseSettings, DatabaseSettingsSrc, PruningMode};
 use sc_finality_grandpa as grandpa;
 use sp_blockchain::Result as ClientResult;
 use sp_consensus::import_queue::{import_single_block, BlockImportResult, IncomingBlock};
@@ -26,21 +25,11 @@ pub type BlockProcessor<B> =
 pub fn setup_block_processor(
     encoded_data: Vec<u8>,
 ) -> ClientResult<(BlockProcessor<Block>, db::IBCData)> {
-    let ibc_data = db::IBCData::decode(&mut encoded_data.as_slice()).unwrap();
-
     // This dummy genesis provider will panic, if auxiliary storage
     // does not contain authority set at LIGHT_AUTHORITY_SET_KEY.
     let dummy_grandpa_genesis_authority_set_provider = DummyGenesisGrandpaAuthoritySetProvider {};
 
-    let light_storage = LightStorage::new(DatabaseSettings {
-        state_cache_size: 2048,
-        state_cache_child_ratio: Some((20, 100)),
-        pruning: PruningMode::keep_blocks(256),
-        source: DatabaseSettingsSrc::Custom(Arc::new(ibc_data.db.clone())),
-    })?;
-
-    let light_blockchain = sc_client::light::new_light_blockchain(light_storage);
-    let backend = sc_client::light::new_light_backend(light_blockchain.clone());
+    let (backend, ibc_data) = initialize_backend(encoded_data)?;
 
     // We are never going to execute any extrinsic, so we use dummy implementation
     let executor: DummyCallExecutor<Block, LightStorage<Block>> = DummyCallExecutor {
