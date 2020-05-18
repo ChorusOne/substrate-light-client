@@ -34,7 +34,7 @@ pub fn initialize_db(
         genesis_data: GenesisData {},
     };
     let empty_data = new_ibc_data.encode();
-    let (mut backend, ibc_data) = initialize_backend(empty_data)?;
+    let (backend, ibc_data) = initialize_backend(empty_data)?;
     insert_light_authority_set(backend.clone(), initial_authority_set)?;
 
     // Ingest initial header

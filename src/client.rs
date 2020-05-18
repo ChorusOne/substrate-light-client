@@ -25,7 +25,7 @@ use sp_consensus::{
 };
 use sp_core::NativeOrEncoded;
 use sp_runtime::generic::BlockId;
-use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor, One};
 use sp_storage::StorageKey;
 use sp_version::RuntimeVersion;
 
@@ -416,6 +416,14 @@ where
             // So we must refuse to import.
             if *header.number() <= info.best_number || *parent_hash != info.best_hash {
                 return Err(BlockchainError::NotInFinalizedChain);
+            }
+
+            if *header.number() != info.best_number + One::one() {
+                return Err(BlockchainError::NonSequentialFinalization(format!(
+                    "tried to import non sequential block. Expected block number: {}. Got: {}",
+                    info.best_number + One::one(),
+                    *header.number()
+                )));
             }
 
             operation.op.set_block_data(
