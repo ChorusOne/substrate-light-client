@@ -52,13 +52,7 @@ pub fn setup_block_processor(
     // Custom client implementation with dummy runtime
     let client: Arc<
         Client<_, _, RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>,
-    > = Arc::new(Client {
-        backend: backend.clone(),
-        _phantom: PhantomData,
-        _phantom2: PhantomData,
-        _phantom3: PhantomData,
-        aux_store_write_enabled: true,
-    });
+    > = Arc::new(Client::new(backend.clone(), true));
 
     // This is to prevent grandpa light import queue to accidentally
     // re-write authority set
