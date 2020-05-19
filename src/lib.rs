@@ -170,8 +170,8 @@ mod tests {
         // Let's push scheduled change
         let change = ScheduledChange {
             next_authorities: vec![
-                (AuthorityId::from_slice(&[5; 32]), 5),
-                (AuthorityId::from_slice(&[2; 32]), 45),
+                (AuthorityId::from_slice(&[1; 32]), 3),
+                (AuthorityId::from_slice(&[1; 32]), 3),
             ],
             delay: 2,
         };
@@ -187,10 +187,17 @@ mod tests {
         // We should now have next schedule change in database
         let (backend, ibc_data) = initialize_backend(encoded_data).unwrap();
         let possible_next_authority_change =
-            fetch_next_authority_change::<_, Block>(backend).unwrap();
+            fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
         assert!(possible_next_authority_change.is_some());
         let next_authority_change = possible_next_authority_change.unwrap();
         assert_eq!(next_authority_change.change, change);
+
+        // Current authority set remains same
+        let possible_current_authority_set = fetch_light_authority_set(backend.clone()).unwrap();
+        assert!(possible_current_authority_set.is_some());
+        let current_authority_set = possible_current_authority_set.unwrap();
+        assert_eq!(current_authority_set.set_id(), 0);
+        assert_eq!(current_authority_set.authorities(), vec![]);
 
         // It is not necessary to derive encoded data here,
         // we are doing it just for the sake of highlighting
@@ -203,8 +210,8 @@ mod tests {
             GRANDPA_ENGINE_ID,
             sp_finality_grandpa::ConsensusLog::ScheduledChange(ScheduledChange {
                 next_authorities: vec![
-                    (AuthorityId::from_slice(&[3; 32]), 6),
-                    (AuthorityId::from_slice(&[4; 32]), 43),
+                    (AuthorityId::from_slice(&[2; 32]), 4),
+                    (AuthorityId::from_slice(&[2; 32]), 4),
                 ],
                 delay: 4,
             })
@@ -222,14 +229,14 @@ mod tests {
         // Updating encoded data
         let encoded_data = result.unwrap().1;
 
-        // We can push another authority set as new authority set is enacted.
+        // We can push another authority set as new authority set will be enacted.
         let mut next_header = create_next_header(next_header);
         let new_change = ScheduledChange {
             next_authorities: vec![
-                (AuthorityId::from_slice(&[1; 32]), 6),
-                (AuthorityId::from_slice(&[2; 32]), 43),
+                (AuthorityId::from_slice(&[3; 32]), 5),
+                (AuthorityId::from_slice(&[3; 32]), 5),
             ],
-            delay: 4,
+            delay: 2,
         };
         next_header.digest_mut().push(DigestItem::Consensus(
             GRANDPA_ENGINE_ID,
@@ -240,11 +247,11 @@ mod tests {
         // Updating encoded data
         let encoded_data = result.unwrap().1;
 
-        // After two blocks, we have our authority set changed, and older NextChangeInAuthority struct replaced
+        // Now, we have our authority set changed, and older NextChangeInAuthority struct replaced
         // by new change
 
         // Previous change has been overwritten by new change
-        let (backend, _) = initialize_backend(encoded_data).unwrap();
+        let (backend, _) = initialize_backend(encoded_data.clone()).unwrap();
         let possible_next_authority_change =
             fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
         assert!(possible_next_authority_change.is_some());
@@ -252,13 +259,67 @@ mod tests {
         assert_eq!(new_change, next_authority_change.change);
 
         // We now have authority set enacted as per previous change
-        let possible_light_authority_set = fetch_light_authority_set(backend.clone()).unwrap();
-        assert!(possible_light_authority_set.is_some());
-        let light_authority_set = possible_light_authority_set.unwrap();
+        let possible_current_authority_set = fetch_light_authority_set(backend.clone()).unwrap();
+        assert!(possible_current_authority_set.is_some());
+        let current_authority_set = possible_current_authority_set.unwrap();
         // Last authority set had set_id of 0
         // so while ingesting new authority set it
         // was incremented by 1.
-        assert_eq!(light_authority_set.set_id(), 1);
-        assert_eq!(light_authority_set.authorities(), change.next_authorities);
+        assert_eq!(current_authority_set.set_id(), 1);
+        assert_eq!(current_authority_set.authorities(), change.next_authorities);
+
+        // Now, a scenario where scheduled change isn't part of digest after two blocks delay
+        // In this case new authority set will be enacted and aux entry will be removed
+
+        let mut next_header = create_next_header(next_header.clone());
+        // We don't need cloned digest
+        next_header.digest.logs.clear();
+        let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None);
+        assert!(result.is_ok());
+        // Updating encoded data
+        let encoded_data = result.unwrap().1;
+
+        // new change still same
+        let (backend, _) = initialize_backend(encoded_data.clone()).unwrap();
+        let possible_next_authority_change =
+            fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
+        assert!(possible_next_authority_change.is_some());
+        let next_authority_change = possible_next_authority_change.unwrap();
+        assert_eq!(new_change, next_authority_change.change);
+
+        // authority set still same
+        let possible_current_authority_set = fetch_light_authority_set(backend.clone()).unwrap();
+        assert!(possible_current_authority_set.is_some());
+        let current_authority_set = possible_current_authority_set.unwrap();
+        // Last authority set had set_id of 0
+        // so while ingesting new authority set it
+        // was incremented by 1.
+        assert_eq!(current_authority_set.set_id(), 1);
+        assert_eq!(current_authority_set.authorities(), change.next_authorities);
+
+        let mut next_header = create_next_header(next_header.clone());
+        let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None);
+        assert!(result.is_ok());
+        // Updating encoded data
+        let encoded_data = result.unwrap().1;
+
+        // Now NextChangeInAuthority should be removed from db and authority set is changed
+        let (backend, _) = initialize_backend(encoded_data.clone()).unwrap();
+        let possible_next_authority_change =
+            fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
+        assert!(possible_next_authority_change.is_none());
+
+        // Brand new authority set
+        let possible_current_authority_set = fetch_light_authority_set(backend.clone()).unwrap();
+        assert!(possible_current_authority_set.is_some());
+        let current_authority_set = possible_current_authority_set.unwrap();
+        // Last authority set had set_id of 1
+        // so while ingesting new authority set it
+        // was incremented by 1.
+        assert_eq!(current_authority_set.set_id(), 2);
+        assert_eq!(
+            current_authority_set.authorities(),
+            new_change.next_authorities
+        );
     }
 }
