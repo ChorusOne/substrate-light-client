@@ -30,11 +30,11 @@ use sp_storage::StorageKey;
 use sp_version::RuntimeVersion;
 
 pub struct Client<B, Block, RA, E> {
-    pub backend: Arc<B>,
-    pub _phantom: PhantomData<RA>,
-    pub _phantom2: PhantomData<Block>,
-    pub _phantom3: PhantomData<E>,
-    pub aux_store_write_enabled: bool,
+    backend: Arc<B>,
+    _phantom: PhantomData<RA>,
+    _phantom2: PhantomData<Block>,
+    _phantom3: PhantomData<E>,
+    aux_store_write_enabled: bool,
 }
 
 impl<B, Block, RA, E> Client<B, Block, RA, E>
@@ -78,6 +78,16 @@ impl<B, Block, RA, E> Client<B, Block, RA, E> {
             _phantom2: self._phantom2.clone(),
             _phantom3: self._phantom3.clone(),
             aux_store_write_enabled: false,
+        }
+    }
+
+    pub fn new(backend: Arc<B>, aux_store_write_enabled: bool) -> Self {
+        Self {
+            backend: backend.clone(),
+            _phantom: PhantomData,
+            _phantom2: PhantomData,
+            _phantom3: PhantomData,
+            aux_store_write_enabled,
         }
     }
 }
