@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn test_authority_set_processing() {
-        let (mut encoded_data, initial_header) = init_test_db();
+        let (encoded_data, initial_header) = init_test_db();
 
         let mut next_header = create_next_header(initial_header);
 
@@ -179,7 +179,8 @@ mod tests {
             GRANDPA_ENGINE_ID,
             sp_finality_grandpa::ConsensusLog::ScheduledChange(change.clone()).encode(),
         ));
-        encoded_data = ingest_finalized_header(encoded_data, next_header.clone(), None)
+        // Updating encoded data
+        let encoded_data = ingest_finalized_header(encoded_data, next_header.clone(), None)
             .unwrap()
             .1;
 
@@ -194,7 +195,7 @@ mod tests {
         // It is not necessary to derive encoded data here,
         // we are doing it just for the sake of highlighting
         // how encoded data is updated.
-        let mut encoded_data = ibc_data.encode();
+        let encoded_data = ibc_data.encode();
 
         // We cannot push another authority set while previous one exists
         let mut next_header = create_next_header(next_header);
@@ -218,7 +219,8 @@ mod tests {
         next_header.digest.clear();
         let result = ingest_finalized_header(encoded_data, next_header.clone(), None);
         assert!(result.is_ok());
-        let mut encoded_data = result.unwrap().1;
+        // Updating encoded data
+        let encoded_data = result.unwrap().1;
 
         // We can push another authority set as new authority set is enacted.
         let mut next_header = create_next_header(next_header);
@@ -235,7 +237,8 @@ mod tests {
         ));
         let result = ingest_finalized_header(encoded_data, next_header.clone(), None);
         assert!(result.is_ok());
-        let mut encoded_data = result.unwrap().1;
+        // Updating encoded data
+        let encoded_data = result.unwrap().1;
 
         // After two blocks, we have our authority set changed, and older NextChangeInAuthority struct replaced
         // by new change
