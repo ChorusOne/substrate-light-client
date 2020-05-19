@@ -43,6 +43,14 @@ impl LightAuthoritySet {
             authorities: new_authority_list,
         }
     }
+
+    pub fn set_id(&self) -> u64 {
+        self.set_id
+    }
+
+    pub fn authorities(&self) -> AuthorityList {
+        self.authorities.clone()
+    }
 }
 
 #[derive(Encode, Decode)]

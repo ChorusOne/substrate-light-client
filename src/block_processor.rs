@@ -8,14 +8,13 @@ use crate::runtime::RuntimeApiConstructor;
 use crate::types::Block;
 use crate::verifier::GrandpaVerifier;
 use sc_chain_spec::{ChainType, GenericChainSpec, NoExtension};
-use sc_client::light::backend::Backend;
 use sc_client_api::FetchChecker;
 use sc_client_db::light::LightStorage;
 use sc_finality_grandpa as grandpa;
 use sp_blockchain::Result as ClientResult;
 use sp_consensus::import_queue::{import_single_block, BlockImportResult, IncomingBlock};
 use sp_consensus::BlockOrigin;
-use sp_runtime::traits::{BlakeTwo256, NumberFor};
+use sp_runtime::traits::NumberFor;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
