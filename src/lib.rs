@@ -101,11 +101,11 @@ mod tests {
     use parity_scale_codec::Encode;
     use sc_finality_grandpa::AuthorityId;
     use sp_core::crypto::Public;
-    use sp_finality_grandpa::{ConsensusLog, ScheduledChange, GRANDPA_ENGINE_ID};
-    use sp_runtime::traits::{Header as HeaderT, One, Zero};
+    use sp_finality_grandpa::{ScheduledChange, GRANDPA_ENGINE_ID};
+    use sp_runtime::traits::{Header as HeaderT, One};
     use sp_runtime::DigestItem;
 
-    fn init_test_db() -> (Vec<u8>, Header) {
+    fn init_test_db(custom_authority_set: Option<LightAuthoritySet>) -> (Vec<u8>, Header) {
         let initial_header = Header::new(
             One::one(),
             Default::default(),
@@ -114,8 +114,11 @@ mod tests {
             Default::default(),
         );
 
-        let data =
-            initialize_db(initial_header.clone(), LightAuthoritySet::new(0, vec![])).unwrap();
+        let data = if custom_authority_set.is_none() {
+            initialize_db(initial_header.clone(), LightAuthoritySet::new(0, vec![])).unwrap()
+        } else {
+            initialize_db(initial_header.clone(), custom_authority_set.unwrap()).unwrap()
+        };
         assert!(data.len() > 0);
 
         (data, initial_header)
@@ -130,7 +133,7 @@ mod tests {
 
     #[test]
     fn test_initialize_db_success() {
-        let (encoded_data, initial_header) = init_test_db();
+        let (encoded_data, initial_header) = init_test_db(None);
         let mut next_header = create_next_header(initial_header);
 
         assert!(ingest_finalized_header(encoded_data, next_header, None).is_ok());
@@ -138,7 +141,7 @@ mod tests {
 
     #[test]
     fn test_initialize_db_non_sequential_block() {
-        let (encoded_data, initial_header) = init_test_db();
+        let (encoded_data, initial_header) = init_test_db(None);
 
         let mut next_header = create_next_header(initial_header);
         // Let's change number of block to be non sequential
@@ -149,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_initialize_db_wrong_parent_hash() {
-        let (encoded_data, initial_header) = init_test_db();
+        let (encoded_data, initial_header) = init_test_db(None);
 
         let mut next_header = create_next_header(initial_header);
         // Setting wrong parent hash
@@ -163,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_authority_set_processing() {
-        let (encoded_data, initial_header) = init_test_db();
+        let (encoded_data, initial_header) = init_test_db(None);
 
         let mut next_header = create_next_header(initial_header);
 

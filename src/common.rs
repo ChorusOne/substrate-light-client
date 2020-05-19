@@ -20,7 +20,7 @@ pub const NUM_COLUMNS: u32 = 11;
 /// LightAuthoritySet is saved under this key in aux storage.
 pub const LIGHT_AUTHORITY_SET_KEY: &[u8] = b"grandpa_voters";
 /// Latest authority set tracker.
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Encode, Decode, Clone)]
 pub struct LightAuthoritySet {
     set_id: u64,
     authorities: AuthorityList,
