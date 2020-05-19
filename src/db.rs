@@ -158,8 +158,6 @@ mod tests {
 
     use kvdb::KeyValueDB;
     use parity_scale_codec::{Decode, Encode};
-    use sp_core::crypto::Public;
-    use sp_finality_grandpa::AuthorityId;
 
     use crate::db::{create, IBCData, DB};
     use crate::genesis::GenesisData;
