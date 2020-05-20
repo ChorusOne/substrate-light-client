@@ -98,12 +98,15 @@ mod tests {
     use crate::types::{Block, Header};
     use crate::{ingest_finalized_header, initialize_db};
     use clear_on_drop::clear::Clear;
-    use parity_scale_codec::Encode;
-    use sc_finality_grandpa::AuthorityId;
+    use parity_scale_codec::{Encode, Decode};
+    use sc_finality_grandpa::{AuthorityId, Precommit, Message};
     use sp_core::crypto::Public;
-    use sp_finality_grandpa::{ScheduledChange, GRANDPA_ENGINE_ID};
-    use sp_runtime::traits::{Header as HeaderT, One};
+    use sp_finality_grandpa::{ScheduledChange, GRANDPA_ENGINE_ID, AuthorityList, AuthoritySignature};
+    use sp_runtime::traits::{Header as HeaderT, One, Block as BlockT, NumberFor};
     use sp_runtime::DigestItem;
+    use sp_core::ed25519;
+    use finality_grandpa::{SignedPrecommit, Commit};
+    use sp_keyring::Ed25519Keyring;
 
     fn init_test_db(custom_authority_set: Option<LightAuthoritySet>) -> (Vec<u8>, Header) {
         let initial_header = Header::new(
@@ -324,5 +327,67 @@ mod tests {
             current_authority_set.authorities(),
             new_change.next_authorities
         );
+    }
+
+    #[derive(Encode, Decode)]
+    pub struct GrandpaJustification<Block: BlockT> {
+        round: u64,
+        commit: Commit<Block::Hash, NumberFor<Block>, AuthoritySignature, AuthorityId>,
+        votes_ancestries: Vec<Block::Header>,
+    }
+
+    fn make_ids(keys: &[Ed25519Keyring]) -> AuthorityList {
+        keys.iter().map(|key| key.clone().public().into()).map(|id| (id, 1)).collect()
+    }
+
+    #[test]
+    fn test_finalization() {
+        let peers = &[Ed25519Keyring::Alice];
+        let voters = make_ids(peers);
+        let genesis_authority_set = LightAuthoritySet::new(0, voters);
+
+        let (encoded_data, initial_header) = init_test_db(Some(genesis_authority_set.clone()));
+        let first_header = create_next_header(initial_header.clone());
+        let result = ingest_finalized_header(encoded_data, first_header.clone(), None);
+        assert!(result.is_ok());
+        // Updated data with first header
+        let encoded_data = result.unwrap().1;
+
+        // Now we will try to ingest a block with justification
+        let second_header = create_next_header(first_header.clone());
+
+        let round: u64 = 1;
+        let set_id: u64 = 0;
+        let precommit = Precommit::<Block> {
+            target_hash: second_header.hash().clone(),
+            target_number: *second_header.number(),
+        };
+        let msg = Message::<Block>::Precommit(precommit.clone());
+        let mut encoded_msg: Vec<u8> = Vec::new();
+        encoded_msg.clear();
+        (&msg, round, set_id).encode_to(&mut encoded_msg);
+        let signature = peers[0].sign(&encoded_msg[..]).into();
+        let precommit = SignedPrecommit {
+            precommit,
+            signature,
+            id: peers[0].public().into(),
+        };
+        let commit = Commit {
+            target_hash: second_header.parent_hash().clone(),
+            target_number: *second_header.number(),
+            precommits: vec![precommit],
+        };
+
+        let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
+            round,
+            commit,
+            votes_ancestries: vec![second_header.clone()] // first_header.clone(), initial_header.clone()
+        };
+
+        let justification = Some(grandpa_justification.encode());
+
+        // Let's ingest it.
+        let result = ingest_finalized_header(encoded_data.clone(), second_header.clone(), justification).unwrap();
+
     }
 }

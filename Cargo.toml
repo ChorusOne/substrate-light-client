@@ -31,3 +31,9 @@ sp-finality-grandpa = "2.0.0-alpha.6"
 
 # Just to build on wasm
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
+
+[dev-dependencies]
+rand = "0.7.3"
+finality-grandpa = "0.11.2"
+ed25519-dalek = "1.0.0-pre.3"
+sp-keyring = "2.0.0-alpha.6"

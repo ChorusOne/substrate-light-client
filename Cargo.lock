@@ -3466,11 +3466,14 @@ name = "substrate_ibc_client"
 version = "0.1.0"
 dependencies = [
  "clear_on_drop",
+ "ed25519-dalek",
+ "finality-grandpa",
  "kvdb",
  "parity-scale-codec",
  "parity-scale-codec-derive",
  "parity-util-mem",
  "parking_lot 0.10.2",
+ "rand",
  "sc-chain-spec",
  "sc-client",
  "sc-client-api",
@@ -3483,6 +3486,7 @@ dependencies = [
  "sp-core",
  "sp-externalities",
  "sp-finality-grandpa",
+ "sp-keyring",
  "sp-runtime",
  "sp-state-machine",
  "sp-storage",
