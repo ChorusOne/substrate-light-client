@@ -356,11 +356,6 @@ where
         self.data.db.write(tx).map_err(db_err)
     }
 
-    /**
-    Since we are only implementing minimal functionalities
-    we will not implement below functions
-    **/
-
     /// Set an existing block as new best block.
     fn set_head(&self, block: BlockId<Block>) -> ClientResult<()> {
         unimplemented!()
