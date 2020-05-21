@@ -97,6 +97,7 @@ where
 
         let mut block_import_params: BlockImportParams<Block, ()> =
             BlockImportParams::new(BlockOrigin::NetworkBroadcast, header);
+        block_import_params.justification = justification;
         if let Some(next_authority_change) = possible_next_authority_change {
             block_import_params.intermediates.insert(
                 Cow::from(GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY),

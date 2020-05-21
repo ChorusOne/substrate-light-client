@@ -25,7 +25,7 @@ use sp_consensus::{
 };
 use sp_core::NativeOrEncoded;
 use sp_runtime::generic::BlockId;
-use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor, One};
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 use sp_storage::StorageKey;
 use sp_version::RuntimeVersion;
 
@@ -420,22 +420,6 @@ where
                 BlockStatus::Unknown => {}
             }
 
-            let info = self.backend.blockchain().info();
-
-            // the block is lower than our last best block or not child of last best block,
-            // So we must refuse to import.
-            if *header.number() <= info.best_number || *parent_hash != info.best_hash {
-                return Err(BlockchainError::NotInFinalizedChain);
-            }
-
-            if *header.number() != info.best_number + One::one() {
-                return Err(BlockchainError::NonSequentialFinalization(format!(
-                    "tried to import non sequential block. Expected block number: {}. Got: {}",
-                    info.best_number + One::one(),
-                    *header.number()
-                )));
-            }
-
             operation.op.set_block_data(
                 header.clone(),
                 body,
@@ -485,21 +469,36 @@ where
     ) -> BlockchainResult<()> {
         let to_be_finalized = self.backend.blockchain().expect_block_hash_from_id(&id)?;
         let last_finalized = self.backend.blockchain().last_finalized()?;
+        let first_set_of_blocks_to_be_finalized = last_finalized == Default::default();
 
-        if to_be_finalized == last_finalized {
+        let tree_route_from = if first_set_of_blocks_to_be_finalized {
+            let info = self.backend.blockchain().info();
+            info.genesis_hash
+        } else {
+            last_finalized
+        };
+
+        if !first_set_of_blocks_to_be_finalized && to_be_finalized == last_finalized {
             return Ok(());
         }
 
-        let route_from_finalized =
-            sp_blockchain::tree_route(self.backend.blockchain(), last_finalized, to_be_finalized)?;
+        let route_to_be_finalized =
+            sp_blockchain::tree_route(self.backend.blockchain(), tree_route_from, to_be_finalized)?;
 
         // Since we do not allow forks, retracted always needs to be empty and
         // enacted always need to be non-empty
-        assert!(route_from_finalized.retracted().is_empty());
-        assert!(!route_from_finalized.enacted().is_empty());
+        assert!(route_to_be_finalized.retracted().is_empty());
+        assert!(!route_to_be_finalized.enacted().is_empty());
 
-        let enacted = route_from_finalized.enacted();
+        let enacted = route_to_be_finalized.enacted();
         assert!(enacted.len() > 0);
+
+        if first_set_of_blocks_to_be_finalized {
+            operation
+                .op
+                .mark_finalized(BlockId::Hash(tree_route_from), None)?;
+        }
+
         for finalize_new in &enacted[..enacted.len() - 1] {
             operation
                 .op

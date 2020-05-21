@@ -5,17 +5,15 @@ use crate::db;
 use crate::dummy_objs::DummyCallExecutor;
 use crate::dummy_objs::{DummyFetchChecker, DummyGenesisGrandpaAuthoritySetProvider};
 use crate::runtime::RuntimeApiConstructor;
+use crate::storage::IBCStorage;
 use crate::types::Block;
 use crate::verifier::GrandpaVerifier;
-use sc_chain_spec::{ChainType, GenericChainSpec, NoExtension};
 use sc_client_api::FetchChecker;
-use sc_client_db::light::LightStorage;
 use sc_finality_grandpa as grandpa;
 use sp_blockchain::Result as ClientResult;
 use sp_consensus::import_queue::{import_single_block, BlockImportResult, IncomingBlock};
 use sp_consensus::BlockOrigin;
 use sp_runtime::traits::NumberFor;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 pub type BlockProcessor<B> =
@@ -23,35 +21,17 @@ pub type BlockProcessor<B> =
 
 pub fn setup_block_processor(
     encoded_data: Vec<u8>,
+    max_non_finalized_blocks_allowed: u64,
 ) -> ClientResult<(BlockProcessor<Block>, db::IBCData)> {
     // This dummy genesis provider will panic, if auxiliary storage
     // does not contain authority set at LIGHT_AUTHORITY_SET_KEY.
     let dummy_grandpa_genesis_authority_set_provider = DummyGenesisGrandpaAuthoritySetProvider {};
 
-    let (backend, ibc_data) = initialize_backend(encoded_data)?;
-
-    // We are never going to execute any extrinsic, so we use dummy implementation
-    let executor: DummyCallExecutor<Block, LightStorage<Block>> = DummyCallExecutor {
-        _phantom: PhantomData,
-        _phantom2: PhantomData,
-    };
-
-    let dummy_chain_spec: GenericChainSpec<(), NoExtension> = GenericChainSpec::from_genesis(
-        "substrate_ibc_verification",
-        "substrate_ibc_verification",
-        ChainType::Custom(String::from("block_verifier")),
-        || {},
-        vec![],
-        None,
-        None,
-        None,
-        None,
-    );
+    let (backend, ibc_data) = initialize_backend(encoded_data, max_non_finalized_blocks_allowed)?;
 
     // Custom client implementation with dummy runtime
-    let client: Arc<
-        Client<_, _, RuntimeApiConstructor, DummyCallExecutor<Block, LightStorage<Block>>>,
-    > = Arc::new(Client::new(backend.clone(), true));
+    let client: Arc<Client<_, _, RuntimeApiConstructor, DummyCallExecutor<Block, IBCStorage>>> =
+        Arc::new(Client::new(backend.clone(), true));
 
     // This is to prevent grandpa light import queue to accidentally
     // re-write authority set

@@ -6,6 +6,7 @@ mod db;
 mod dummy_objs;
 mod genesis;
 mod runtime;
+mod storage;
 mod types;
 mod verifier;
 
@@ -16,18 +17,18 @@ use crate::common::{
 use crate::db::create;
 use crate::genesis::GenesisData;
 use crate::types::{Block, Header};
-use kvdb::KeyValueDB;
 use parity_scale_codec::Encode;
 use sc_client_api::{Backend, BlockImportOperation, NewBlockState};
 use sp_blockchain::Error as BlockchainError;
 use sp_consensus::import_queue::{BlockImportResult, IncomingBlock};
-use sp_runtime::traits::{Header as HeaderT, NumberFor, Zero};
+use sp_runtime::traits::NumberFor;
 use sp_runtime::Justification;
 
 // WASM entry point need to call this function
 pub fn initialize_db(
     initial_header: Header,
     initial_authority_set: LightAuthoritySet,
+    max_non_finalized_blocks_allowed: u64,
 ) -> Result<Vec<u8>, BlockchainError> {
     let db = create(NUM_COLUMNS);
     let new_ibc_data = crate::db::IBCData {
@@ -35,31 +36,12 @@ pub fn initialize_db(
         genesis_data: GenesisData {},
     };
     let empty_data = new_ibc_data.encode();
-    let (backend, ibc_data) = initialize_backend(empty_data)?;
+    let (backend, ibc_data) = initialize_backend(empty_data, max_non_finalized_blocks_allowed)?;
     insert_light_authority_set(backend.clone(), initial_authority_set)?;
 
-    // Add dummy genesis hash
-    // Note: This is very hacky way to fool into substrate backend that genesis hash is there, which utilize
-    // several private values.
-    // This is done to be able to read blockchain meta successfully.
-    // One option to remove this hacky way is to not rely on the meta data provided by backend in our
-    // custom client.
-    let genesis_header = Header::new(
-        Zero::zero(),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-    );
-    let mut transaction = ibc_data.db.transaction();
-    transaction.put(0, b"gen", &genesis_header.hash().0);
-    ibc_data
-        .db
-        .write(transaction)
-        .map_err(|e| BlockchainError::Backend(format!("{}", e)))?;
-
     // Ingest initial header
-    let mut backend_op = backend.begin_operation()?;
+    let mut backend_op: sc_client::light::backend::ImportOperation<Block, storage::IBCStorage> =
+        backend.begin_operation()?;
     backend_op.set_block_data(initial_header, None, None, NewBlockState::Best)?;
     backend.commit_operation(backend_op)?;
 
@@ -71,9 +53,11 @@ pub fn ingest_finalized_header(
     encoded_data: Vec<u8>,
     finalized_header: Header,
     justification: Option<Justification>,
+    max_non_finalized_blocks_allowed: u64,
 ) -> Result<(BlockImportResult<NumberFor<Block>>, Vec<u8>), String> {
     let (mut block_processor_fn, ibc_data) =
-        setup_block_processor(encoded_data).map_err(|e| format!("{}", e))?;
+        setup_block_processor(encoded_data, max_non_finalized_blocks_allowed)
+            .map_err(|e| format!("{}", e))?;
     let incoming_block = IncomingBlock {
         hash: finalized_header.hash(),
         header: Some(finalized_header),
@@ -95,14 +79,23 @@ mod tests {
         fetch_light_authority_set, fetch_next_authority_change, initialize_backend,
         LightAuthoritySet,
     };
+    use crate::storage::IBCStorage;
     use crate::types::{Block, Header};
     use crate::{ingest_finalized_header, initialize_db};
     use clear_on_drop::clear::Clear;
-    use parity_scale_codec::Encode;
-    use sc_finality_grandpa::AuthorityId;
+    use finality_grandpa::{Commit, SignedPrecommit};
+    use parity_scale_codec::alloc::sync::Arc;
+    use parity_scale_codec::{Decode, Encode};
+    use sc_client_api::Storage;
+    use sc_finality_grandpa::{AuthorityId, Message, Precommit};
+    use sp_blockchain::Backend;
     use sp_core::crypto::Public;
-    use sp_finality_grandpa::{ScheduledChange, GRANDPA_ENGINE_ID};
-    use sp_runtime::traits::{Header as HeaderT, One};
+    use sp_core::ed25519;
+    use sp_finality_grandpa::{
+        AuthorityList, AuthoritySignature, ScheduledChange, GRANDPA_ENGINE_ID,
+    };
+    use sp_keyring::Ed25519Keyring;
+    use sp_runtime::traits::{Block as BlockT, HashFor, Header as HeaderT, NumberFor, One};
     use sp_runtime::DigestItem;
 
     fn init_test_db(custom_authority_set: Option<LightAuthoritySet>) -> (Vec<u8>, Header) {
@@ -188,7 +181,7 @@ mod tests {
             .1;
 
         // We should now have next schedule change in database
-        let (backend, ibc_data) = initialize_backend(encoded_data).unwrap();
+        let (backend, ibc_data) = initialize_backend(encoded_data, 256).unwrap();
         let possible_next_authority_change =
             fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
         assert!(possible_next_authority_change.is_some());
@@ -254,7 +247,7 @@ mod tests {
         // by new change
 
         // Previous change has been overwritten by new change
-        let (backend, _) = initialize_backend(encoded_data.clone()).unwrap();
+        let (backend, _) = initialize_backend(encoded_data.clone(), 256).unwrap();
         let possible_next_authority_change =
             fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
         assert!(possible_next_authority_change.is_some());
@@ -283,7 +276,7 @@ mod tests {
         let encoded_data = result.unwrap().1;
 
         // new change still same
-        let (backend, _) = initialize_backend(encoded_data.clone()).unwrap();
+        let (backend, _) = initialize_backend(encoded_data.clone(), 256).unwrap();
         let possible_next_authority_change =
             fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
         assert!(possible_next_authority_change.is_some());
@@ -307,7 +300,7 @@ mod tests {
         let encoded_data = result.unwrap().1;
 
         // Now NextChangeInAuthority should be removed from db and authority set is changed
-        let (backend, _) = initialize_backend(encoded_data.clone()).unwrap();
+        let (backend, _) = initialize_backend(encoded_data.clone(), 256).unwrap();
         let possible_next_authority_change =
             fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
         assert!(possible_next_authority_change.is_none());
@@ -324,5 +317,76 @@ mod tests {
             current_authority_set.authorities(),
             new_change.next_authorities
         );
+    }
+
+    #[derive(Encode, Decode)]
+    pub struct GrandpaJustification<Block: BlockT> {
+        round: u64,
+        commit: Commit<Block::Hash, NumberFor<Block>, AuthoritySignature, AuthorityId>,
+        votes_ancestries: Vec<Block::Header>,
+    }
+
+    fn make_ids(keys: &[Ed25519Keyring]) -> AuthorityList {
+        keys.iter()
+            .map(|key| key.clone().public().into())
+            .map(|id| (id, 1))
+            .collect()
+    }
+
+    #[test]
+    fn test_finalization() {
+        let peers = &[Ed25519Keyring::Alice];
+        let voters = make_ids(peers);
+        let genesis_authority_set = LightAuthoritySet::new(0, voters);
+
+        let (encoded_data, initial_header) = init_test_db(Some(genesis_authority_set.clone()));
+        let first_header = create_next_header(initial_header.clone());
+        let result = ingest_finalized_header(encoded_data, first_header.clone(), None);
+        assert!(result.is_ok());
+        // Updated data with first header
+        let encoded_data = result.unwrap().1;
+
+        // Now we will try to ingest a block with justification
+        let second_header = create_next_header(first_header.clone());
+
+        let round: u64 = 1;
+        let set_id: u64 = 0;
+        let precommit = Precommit::<Block> {
+            target_hash: second_header.hash().clone(),
+            target_number: *second_header.number(),
+        };
+        let msg = Message::<Block>::Precommit(precommit.clone());
+        let mut encoded_msg: Vec<u8> = Vec::new();
+        encoded_msg.clear();
+        (&msg, round, set_id).encode_to(&mut encoded_msg);
+        let signature = peers[0].sign(&encoded_msg[..]).into();
+        let precommit = SignedPrecommit {
+            precommit,
+            signature,
+            id: peers[0].public().into(),
+        };
+        let commit = Commit {
+            target_hash: second_header.parent_hash().clone(),
+            target_number: *second_header.number(),
+            precommits: vec![precommit],
+        };
+
+        let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
+            round,
+            commit,
+            votes_ancestries: vec![second_header.clone()], // first_header.clone(), initial_header.clone()
+        };
+
+        let justification = Some(grandpa_justification.encode());
+
+        // Let's ingest it.
+        let result =
+            ingest_finalized_header(encoded_data.clone(), second_header.clone(), justification);
+        assert!(result.is_ok());
+
+        let encoded_data = result.unwrap().1;
+        let (backend, _ibc_data) = initialize_backend(encoded_data, 256).unwrap();
+        let storage = backend.blockchain().storage();
+        assert!(Storage::<Block>::last_finalized(storage).unwrap() == second_header.hash());
     }
 }
