@@ -21,12 +21,13 @@ pub type BlockProcessor<B> =
 
 pub fn setup_block_processor(
     encoded_data: Vec<u8>,
+    max_non_finalized_blocks_allowed: u64,
 ) -> ClientResult<(BlockProcessor<Block>, db::IBCData)> {
     // This dummy genesis provider will panic, if auxiliary storage
     // does not contain authority set at LIGHT_AUTHORITY_SET_KEY.
     let dummy_grandpa_genesis_authority_set_provider = DummyGenesisGrandpaAuthoritySetProvider {};
 
-    let (backend, ibc_data) = initialize_backend(encoded_data)?;
+    let (backend, ibc_data) = initialize_backend(encoded_data, max_non_finalized_blocks_allowed)?;
 
     // Custom client implementation with dummy runtime
     let client: Arc<Client<_, _, RuntimeApiConstructor, DummyCallExecutor<Block, IBCStorage>>> =

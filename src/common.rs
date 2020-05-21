@@ -78,10 +78,11 @@ where
 
 pub fn initialize_backend(
     encoded_data: Vec<u8>,
+    max_non_finalized_blocks_allowed: u64,
 ) -> Result<(Arc<Backend<IBCStorage, HashFor<Block>>>, db::IBCData), BlockchainError> {
     let ibc_data = db::IBCData::decode(&mut encoded_data.as_slice()).unwrap();
 
-    let light_storage = IBCStorage::new(ibc_data.clone(), 256);
+    let light_storage = IBCStorage::new(ibc_data.clone(), max_non_finalized_blocks_allowed);
 
     let light_blockchain = sc_client::light::new_light_blockchain::<Block, _>(light_storage);
     Ok((

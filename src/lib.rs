@@ -28,6 +28,7 @@ use sp_runtime::Justification;
 pub fn initialize_db(
     initial_header: Header,
     initial_authority_set: LightAuthoritySet,
+    max_non_finalized_blocks_allowed: u64,
 ) -> Result<Vec<u8>, BlockchainError> {
     let db = create(NUM_COLUMNS);
     let new_ibc_data = crate::db::IBCData {
@@ -35,7 +36,7 @@ pub fn initialize_db(
         genesis_data: GenesisData {},
     };
     let empty_data = new_ibc_data.encode();
-    let (backend, ibc_data) = initialize_backend(empty_data)?;
+    let (backend, ibc_data) = initialize_backend(empty_data, max_non_finalized_blocks_allowed)?;
     insert_light_authority_set(backend.clone(), initial_authority_set)?;
 
     // Ingest initial header
@@ -52,9 +53,11 @@ pub fn ingest_finalized_header(
     encoded_data: Vec<u8>,
     finalized_header: Header,
     justification: Option<Justification>,
+    max_non_finalized_blocks_allowed: u64,
 ) -> Result<(BlockImportResult<NumberFor<Block>>, Vec<u8>), String> {
     let (mut block_processor_fn, ibc_data) =
-        setup_block_processor(encoded_data).map_err(|e| format!("{}", e))?;
+        setup_block_processor(encoded_data, max_non_finalized_blocks_allowed)
+            .map_err(|e| format!("{}", e))?;
     let incoming_block = IncomingBlock {
         hash: finalized_header.hash(),
         header: Some(finalized_header),
@@ -178,7 +181,7 @@ mod tests {
             .1;
 
         // We should now have next schedule change in database
-        let (backend, ibc_data) = initialize_backend(encoded_data).unwrap();
+        let (backend, ibc_data) = initialize_backend(encoded_data, 256).unwrap();
         let possible_next_authority_change =
             fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
         assert!(possible_next_authority_change.is_some());
@@ -244,7 +247,7 @@ mod tests {
         // by new change
 
         // Previous change has been overwritten by new change
-        let (backend, _) = initialize_backend(encoded_data.clone()).unwrap();
+        let (backend, _) = initialize_backend(encoded_data.clone(), 256).unwrap();
         let possible_next_authority_change =
             fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
         assert!(possible_next_authority_change.is_some());
@@ -273,7 +276,7 @@ mod tests {
         let encoded_data = result.unwrap().1;
 
         // new change still same
-        let (backend, _) = initialize_backend(encoded_data.clone()).unwrap();
+        let (backend, _) = initialize_backend(encoded_data.clone(), 256).unwrap();
         let possible_next_authority_change =
             fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
         assert!(possible_next_authority_change.is_some());
@@ -297,7 +300,7 @@ mod tests {
         let encoded_data = result.unwrap().1;
 
         // Now NextChangeInAuthority should be removed from db and authority set is changed
-        let (backend, _) = initialize_backend(encoded_data.clone()).unwrap();
+        let (backend, _) = initialize_backend(encoded_data.clone(), 256).unwrap();
         let possible_next_authority_change =
             fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
         assert!(possible_next_authority_change.is_none());
@@ -382,7 +385,7 @@ mod tests {
         assert!(result.is_ok());
 
         let encoded_data = result.unwrap().1;
-        let (backend, _ibc_data) = initialize_backend(encoded_data).unwrap();
+        let (backend, _ibc_data) = initialize_backend(encoded_data, 256).unwrap();
         let storage = backend.blockchain().storage();
         assert!(Storage::<Block>::last_finalized(storage).unwrap() == second_header.hash());
     }
