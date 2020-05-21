@@ -306,7 +306,7 @@ where
             possible_meta.unwrap()
         };
 
-        if meta.non_finalized_blocks > self.max_non_finalized_blocks_allowed {
+        if meta.non_finalized_blocks >= self.max_non_finalized_blocks_allowed {
             return Err(ClientError::Backend(format!(
                 "Cannot import any more blocks, before finalizing previous blocks"
             )));
