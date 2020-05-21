@@ -69,7 +69,19 @@ pub fn ingest_finalized_header(
 
     // We aren't returning updated db data from block processor function directly, because
     // in future we might want to call it for multiple blocks per tx.
-    Ok((block_processor_fn(incoming_block)?, ibc_data.encode()))
+    let block_import_response = block_processor_fn(incoming_block)?;
+    match &block_import_response {
+        BlockImportResult::ImportedKnown(_) => {}
+        BlockImportResult::ImportedUnknown(_, aux, _) => {
+            if aux.bad_justification || aux.needs_finality_proof {
+                return Err(format!(
+                    "Error: {}",
+                    "Justification is invalid or authority set is not updated."
+                ));
+            }
+        }
+    }
+    Ok((block_import_response, ibc_data.encode()))
 }
 
 #[cfg(test)]
