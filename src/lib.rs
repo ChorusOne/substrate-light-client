@@ -388,8 +388,64 @@ mod tests {
         assert!(result.is_ok());
 
         let encoded_data = result.unwrap().1;
-        let (backend, _ibc_data) = initialize_backend(encoded_data, 256).unwrap();
+        let (backend, _ibc_data) = initialize_backend(encoded_data.clone(), 256).unwrap();
         let storage = backend.blockchain().storage();
         assert!(Storage::<Block>::last_finalized(storage).unwrap() == second_header.hash());
+
+        let third_header = create_next_header(second_header.clone());
+        let result = ingest_finalized_header(encoded_data.clone(), third_header.clone(), None, 256);
+        assert!(result.is_ok());
+        let encoded_data = result.unwrap().1;
+
+        let fourth_header = create_next_header(third_header.clone());
+        let result =
+            ingest_finalized_header(encoded_data.clone(), fourth_header.clone(), None, 256);
+        assert!(result.is_ok());
+        let encoded_data = result.unwrap().1;
+
+        let fifth_header = create_next_header(fourth_header.clone());
+        // Another justification, finalizing third, fourth and fifth header
+        let round: u64 = 1;
+        let set_id: u64 = 0;
+        let precommit = Precommit::<Block> {
+            target_hash: fifth_header.hash().clone(),
+            target_number: *fifth_header.number(),
+        };
+        let msg = Message::<Block>::Precommit(precommit.clone());
+        let mut encoded_msg: Vec<u8> = Vec::new();
+        encoded_msg.clear();
+        (&msg, round, set_id).encode_to(&mut encoded_msg);
+        let signature = peers[0].sign(&encoded_msg[..]).into();
+        let precommit = SignedPrecommit {
+            precommit,
+            signature,
+            id: peers[0].public().into(),
+        };
+        let commit = Commit {
+            target_hash: fifth_header.parent_hash().clone(),
+            target_number: *fifth_header.number(),
+            precommits: vec![precommit],
+        };
+
+        let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
+            round,
+            commit,
+            votes_ancestries: vec![fifth_header.clone()], // first_header.clone(), initial_header.clone()
+        };
+
+        let justification = Some(grandpa_justification.encode());
+        let result = ingest_finalized_header(
+            encoded_data.clone(),
+            fifth_header.clone(),
+            justification,
+            256,
+        );
+        assert!(result.is_ok());
+
+        // All blocks including fifth one should be finalized
+        let encoded_data = result.unwrap().1;
+        let (backend, _ibc_data) = initialize_backend(encoded_data.clone(), 256).unwrap();
+        let storage = backend.blockchain().storage();
+        assert!(Storage::<Block>::last_finalized(storage).unwrap() == fifth_header.hash());
     }
 }
