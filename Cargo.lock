@@ -1169,17 +1169,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kvdb-memorydb"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4aa954d12cfac958822dfd77aab34f3eec71f103b918c4ab79ab59a36ee594ea"
-dependencies = [
- "kvdb",
- "parity-util-mem",
- "parking_lot 0.10.2",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2420,33 +2409,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-client-db"
-version = "0.8.0-alpha.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b1ae5b4c8333cb751cd9bbc7ecf0eb1c55d4865fca6651066844febcec71618"
-dependencies = [
- "hash-db",
- "kvdb",
- "kvdb-memorydb",
- "linked-hash-map",
- "log",
- "parity-scale-codec",
- "parity-util-mem",
- "parking_lot 0.10.2",
- "sc-client",
- "sc-client-api",
- "sc-executor",
- "sc-state-db",
- "sp-blockchain",
- "sp-consensus",
- "sp-core",
- "sp-runtime",
- "sp-state-machine",
- "sp-trie",
- "substrate-prometheus-endpoint",
-]
-
-[[package]]
 name = "sc-executor"
 version = "0.8.0-alpha.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2642,21 +2604,6 @@ dependencies = [
  "serde_json",
  "sp-utils",
  "wasm-timer",
-]
-
-[[package]]
-name = "sc-state-db"
-version = "0.8.0-alpha.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f31877c85414ed8e19a480940d7ae340832e7616208072cb43982fdcdd176021"
-dependencies = [
- "log",
- "parity-scale-codec",
- "parity-util-mem",
- "parity-util-mem-derive",
- "parking_lot 0.10.2",
- "sc-client-api",
- "sp-core",
 ]
 
 [[package]]
@@ -3477,7 +3424,6 @@ dependencies = [
  "sc-chain-spec",
  "sc-client",
  "sc-client-api",
- "sc-client-db",
  "sc-executor",
  "sc-finality-grandpa",
  "sp-api",

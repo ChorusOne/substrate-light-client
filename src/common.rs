@@ -1,11 +1,10 @@
 use crate::db;
+use crate::storage::IBCStorage;
 use crate::types::Block;
 use parity_scale_codec::alloc::sync::Arc;
 use parity_scale_codec::{Decode, Encode};
 use sc_client::light::backend::Backend;
 use sc_client_api::AuxStore;
-use sc_client_db::light::LightStorage;
-use sc_client_db::{DatabaseSettings, DatabaseSettingsSrc, PruningMode};
 use sp_blockchain::Error as BlockchainError;
 use sp_finality_grandpa::{AuthorityList, ScheduledChange};
 use sp_runtime::traits::{Block as BlockT, HashFor, NumberFor};
@@ -79,25 +78,14 @@ where
 
 pub fn initialize_backend(
     encoded_data: Vec<u8>,
-) -> Result<
-    (
-        Arc<Backend<LightStorage<Block>, HashFor<Block>>>,
-        db::IBCData,
-    ),
-    BlockchainError,
-> {
+) -> Result<(Arc<Backend<IBCStorage, HashFor<Block>>>, db::IBCData), BlockchainError> {
     let ibc_data = db::IBCData::decode(&mut encoded_data.as_slice()).unwrap();
 
-    let light_storage = LightStorage::new(DatabaseSettings {
-        state_cache_size: 2048,
-        state_cache_child_ratio: Some((20, 100)),
-        pruning: PruningMode::keep_blocks(256),
-        source: DatabaseSettingsSrc::Custom(Arc::new(ibc_data.db.clone())),
-    })?;
+    let light_storage = IBCStorage::new(ibc_data.clone(), 256);
 
-    let light_blockchain = sc_client::light::new_light_blockchain(light_storage);
+    let light_blockchain = sc_client::light::new_light_blockchain::<Block, _>(light_storage);
     Ok((
-        sc_client::light::new_light_backend(light_blockchain.clone()),
+        sc_client::light::new_light_backend::<Block, _>(light_blockchain.clone()),
         ibc_data,
     ))
 }
