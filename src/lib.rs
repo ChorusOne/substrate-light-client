@@ -28,7 +28,6 @@ use sp_runtime::Justification;
 pub fn initialize_db(
     initial_header: Header,
     initial_authority_set: LightAuthoritySet,
-    max_non_finalized_blocks_allowed: u64,
 ) -> Result<Vec<u8>, BlockchainError> {
     let db = create(NUM_COLUMNS);
     let new_ibc_data = crate::db::IBCData {
@@ -36,7 +35,7 @@ pub fn initialize_db(
         genesis_data: GenesisData {},
     };
     let empty_data = new_ibc_data.encode();
-    let (backend, ibc_data) = initialize_backend(empty_data, max_non_finalized_blocks_allowed)?;
+    let (backend, ibc_data) = initialize_backend(empty_data, 1)?;
     insert_light_authority_set(backend.clone(), initial_authority_set)?;
 
     // Ingest initial header
@@ -129,7 +128,7 @@ mod tests {
         let (encoded_data, initial_header) = init_test_db(None);
         let mut next_header = create_next_header(initial_header);
 
-        assert!(ingest_finalized_header(encoded_data, next_header, None).is_ok());
+        assert!(ingest_finalized_header(encoded_data, next_header, None, 256).is_ok());
     }
 
     #[test]
@@ -140,7 +139,7 @@ mod tests {
         // Let's change number of block to be non sequential
         next_header.number += 1;
 
-        assert_eq!(ingest_finalized_header(encoded_data, next_header, None), Err(String::from("Other(ClientImport(\"Import failed: Did not finalize blocks in sequential order.\"))")));
+        assert_eq!(ingest_finalized_header(encoded_data, next_header, None, 256), Err(String::from("Other(ClientImport(\"Import failed: Did not finalize blocks in sequential order.\"))")));
     }
 
     #[test]
@@ -152,7 +151,7 @@ mod tests {
         next_header.parent_hash = Default::default();
 
         assert_eq!(
-            ingest_finalized_header(encoded_data, next_header, None),
+            ingest_finalized_header(encoded_data, next_header, None, 256),
             Err(String::from("UnknownParent"))
         );
     }
@@ -176,7 +175,7 @@ mod tests {
             sp_finality_grandpa::ConsensusLog::ScheduledChange(change.clone()).encode(),
         ));
         // Updating encoded data
-        let encoded_data = ingest_finalized_header(encoded_data, next_header.clone(), None)
+        let encoded_data = ingest_finalized_header(encoded_data, next_header.clone(), None, 256)
             .unwrap()
             .1;
 
@@ -214,13 +213,13 @@ mod tests {
             .encode(),
         ));
         assert_eq!(
-            ingest_finalized_header(encoded_data.clone(), next_header.clone(), None),
+            ingest_finalized_header(encoded_data.clone(), next_header.clone(), None, 256),
             Err(String::from(
                 "VerificationFailed(None, \"Scheduled change already exists.\")"
             ))
         );
         next_header.digest.clear();
-        let result = ingest_finalized_header(encoded_data, next_header.clone(), None);
+        let result = ingest_finalized_header(encoded_data, next_header.clone(), None, 256);
         assert!(result.is_ok());
         // Updating encoded data
         let encoded_data = result.unwrap().1;
@@ -238,7 +237,7 @@ mod tests {
             GRANDPA_ENGINE_ID,
             sp_finality_grandpa::ConsensusLog::ScheduledChange(new_change.clone()).encode(),
         ));
-        let result = ingest_finalized_header(encoded_data, next_header.clone(), None);
+        let result = ingest_finalized_header(encoded_data, next_header.clone(), None, 256);
         assert!(result.is_ok());
         // Updating encoded data
         let encoded_data = result.unwrap().1;
@@ -270,7 +269,7 @@ mod tests {
         let mut next_header = create_next_header(next_header.clone());
         // We don't need cloned digest
         next_header.digest.logs.clear();
-        let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None);
+        let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None, 256);
         assert!(result.is_ok());
         // Updating encoded data
         let encoded_data = result.unwrap().1;
@@ -294,7 +293,7 @@ mod tests {
         assert_eq!(current_authority_set.authorities(), change.next_authorities);
 
         let mut next_header = create_next_header(next_header.clone());
-        let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None);
+        let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None, 256);
         assert!(result.is_ok());
         // Updating encoded data
         let encoded_data = result.unwrap().1;
@@ -341,7 +340,7 @@ mod tests {
 
         let (encoded_data, initial_header) = init_test_db(Some(genesis_authority_set.clone()));
         let first_header = create_next_header(initial_header.clone());
-        let result = ingest_finalized_header(encoded_data, first_header.clone(), None);
+        let result = ingest_finalized_header(encoded_data, first_header.clone(), None, 256);
         assert!(result.is_ok());
         // Updated data with first header
         let encoded_data = result.unwrap().1;
@@ -380,8 +379,12 @@ mod tests {
         let justification = Some(grandpa_justification.encode());
 
         // Let's ingest it.
-        let result =
-            ingest_finalized_header(encoded_data.clone(), second_header.clone(), justification);
+        let result = ingest_finalized_header(
+            encoded_data.clone(),
+            second_header.clone(),
+            justification,
+            256,
+        );
         assert!(result.is_ok());
 
         let encoded_data = result.unwrap().1;
