@@ -2309,35 +2309,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-chain-spec"
-version = "2.0.0-alpha.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d37957c58cb0cf1fa9fe1187447d16e4708a7a0541ee2c1226b2536f4241742"
-dependencies = [
- "impl-trait-for-tuples",
- "sc-chain-spec-derive",
- "sc-network",
- "sc-telemetry",
- "serde",
- "serde_json",
- "sp-chain-spec",
- "sp-core",
- "sp-runtime",
-]
-
-[[package]]
-name = "sc-chain-spec-derive"
-version = "2.0.0-alpha.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2703f02f31f53601ed0408df76939a2e1911ff64a146e7b15ed1be56193e91ba"
-dependencies = [
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "sc-client"
 version = "0.8.0-alpha.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2962,16 +2933,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sp-chain-spec"
-version = "2.0.0-alpha.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0d73d557c214577b64a396e54f337403e251339a6599387747ae3570a19bb27"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "sp-consensus"
 version = "0.8.0-alpha.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3421,7 +3382,6 @@ dependencies = [
  "parity-util-mem",
  "parking_lot 0.10.2",
  "rand",
- "sc-chain-spec",
  "sc-client",
  "sc-client-api",
  "sc-executor",

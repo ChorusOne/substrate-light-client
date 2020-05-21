@@ -8,14 +8,12 @@ use crate::runtime::RuntimeApiConstructor;
 use crate::storage::IBCStorage;
 use crate::types::Block;
 use crate::verifier::GrandpaVerifier;
-use sc_chain_spec::{ChainType, GenericChainSpec, NoExtension};
 use sc_client_api::FetchChecker;
 use sc_finality_grandpa as grandpa;
 use sp_blockchain::Result as ClientResult;
 use sp_consensus::import_queue::{import_single_block, BlockImportResult, IncomingBlock};
 use sp_consensus::BlockOrigin;
 use sp_runtime::traits::NumberFor;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 pub type BlockProcessor<B> =
@@ -29,24 +27,6 @@ pub fn setup_block_processor(
     let dummy_grandpa_genesis_authority_set_provider = DummyGenesisGrandpaAuthoritySetProvider {};
 
     let (backend, ibc_data) = initialize_backend(encoded_data)?;
-
-    // We are never going to execute any extrinsic, so we use dummy implementation
-    let executor: DummyCallExecutor<Block, IBCStorage> = DummyCallExecutor {
-        _phantom: PhantomData,
-        _phantom2: PhantomData,
-    };
-
-    let dummy_chain_spec: GenericChainSpec<(), NoExtension> = GenericChainSpec::from_genesis(
-        "substrate_ibc_verification",
-        "substrate_ibc_verification",
-        ChainType::Custom(String::from("block_verifier")),
-        || {},
-        vec![],
-        None,
-        None,
-        None,
-        None,
-    );
 
     // Custom client implementation with dummy runtime
     let client: Arc<Client<_, _, RuntimeApiConstructor, DummyCallExecutor<Block, IBCStorage>>> =

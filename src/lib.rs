@@ -14,18 +14,14 @@ use crate::block_processor::setup_block_processor;
 use crate::common::{
     initialize_backend, insert_light_authority_set, LightAuthoritySet, NUM_COLUMNS,
 };
-use crate::db::{create, IBCData};
+use crate::db::create;
 use crate::genesis::GenesisData;
-use crate::storage::IBCStorage;
 use crate::types::{Block, Header};
-use kvdb::KeyValueDB;
-use parity_scale_codec::alloc::sync::Arc;
 use parity_scale_codec::Encode;
-use sc_client::light::backend::Backend as LightBackend;
 use sc_client_api::{Backend, BlockImportOperation, NewBlockState};
 use sp_blockchain::Error as BlockchainError;
 use sp_consensus::import_queue::{BlockImportResult, IncomingBlock};
-use sp_runtime::traits::{HashFor, Header as HeaderT, NumberFor, Zero};
+use sp_runtime::traits::NumberFor;
 use sp_runtime::Justification;
 
 // WASM entry point need to call this function

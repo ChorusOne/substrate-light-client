@@ -17,7 +17,7 @@ use sp_api::Core;
 use sp_api::{ApiRef, CallApiAt, CallApiAtParams, ConstructRuntimeApi, ProvideRuntimeApi};
 use sp_blockchain::{
     Backend as BlockchainBackend, BlockStatus, CachedHeaderMetadata, Error as BlockchainError,
-    HashAndNumber, HeaderBackend, HeaderMetadata, Info, Result as BlockchainResult,
+    HeaderBackend, HeaderMetadata, Info, Result as BlockchainResult,
 };
 use sp_consensus::{
     BlockCheckParams, BlockImport, BlockImportParams, BlockStatus as ImportBlockStatus,
@@ -25,7 +25,7 @@ use sp_consensus::{
 };
 use sp_core::NativeOrEncoded;
 use sp_runtime::generic::BlockId;
-use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor, One, Zero};
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 use sp_storage::StorageKey;
 use sp_version::RuntimeVersion;
 

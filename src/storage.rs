@@ -10,7 +10,7 @@ use sp_blockchain::{
 };
 use sp_blockchain::{Error as ClientError, Result as ClientResult};
 use sp_runtime::generic::BlockId;
-use sp_runtime::traits::{Block as BlockT, HashFor, Header as HeaderT, NumberFor, One, Zero};
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor, One, Zero};
 use std::io;
 
 const META_COLUMN: u32 = 0;
@@ -345,7 +345,6 @@ where
             meta.genesis_hash = header.hash();
         }
 
-        let id = Self::header_hash_to_id::<Block>(&header.hash());
         meta.non_finalized_blocks += 1;
         meta.best_hash = header.hash();
         meta.best_number = *header.number();
