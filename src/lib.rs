@@ -11,18 +11,17 @@ mod types;
 mod verifier;
 
 use crate::block_processor::setup_block_processor;
-use crate::common::{
-    initialize_backend, insert_light_authority_set, LightAuthoritySet, NUM_COLUMNS,
-};
+use crate::common::{initialize_backend, insert_light_authority_set, LightAuthoritySet, NUM_COLUMNS, fetch_light_authority_set, Status, fetch_next_authority_change};
 use crate::db::create;
 use crate::genesis::GenesisData;
 use crate::types::{Block, Header};
 use parity_scale_codec::Encode;
 use sc_client_api::{Backend, BlockImportOperation, NewBlockState};
-use sp_blockchain::Error as BlockchainError;
+use sp_blockchain::{Error as BlockchainError, HeaderBackend, Info};
 use sp_consensus::import_queue::{BlockImportResult, IncomingBlock};
-use sp_runtime::traits::NumberFor;
+use sp_runtime::traits::{NumberFor, Block as BlockT};
 use sp_runtime::Justification;
+use sp_api::BlockId;
 
 // WASM entry point need to call this function
 pub fn initialize_db(
@@ -45,6 +44,23 @@ pub fn initialize_db(
     backend.commit_operation(backend_op)?;
 
     Ok(ibc_data.encode())
+}
+
+pub fn current_status<Block>(encoded_data: Vec<u8>) -> Result<Status<Block>, BlockchainError> where Block: BlockT {
+    let (backend, _) = initialize_backend(encoded_data, 1)?;
+    let possible_light_authority_set = fetch_light_authority_set(backend.clone())?;
+    let mut possible_finalized_header: Option<Block::Header> = None;
+    let info: Info<Block> = backend.blockchain().info();
+    if info.finalized_hash != Default::default() {
+        possible_finalized_header = backend.blockchain().header(BlockId::<Block>::Hash(info.finalized_hash))?;
+    }
+    let possible_next_change_in_authority = fetch_next_authority_change(backend.clone())?;
+
+    Ok(Status{
+        possible_finalized_header,
+        possible_light_authority_set,
+        possible_next_change_in_authority
+    })
 }
 
 // WASM entry point need to call this function
@@ -86,13 +102,10 @@ pub fn ingest_finalized_header(
 
 #[cfg(test)]
 mod tests {
-    use crate::common::{
-        fetch_light_authority_set, fetch_next_authority_change, initialize_backend,
-        LightAuthoritySet,
-    };
+    use crate::common::{fetch_light_authority_set, fetch_next_authority_change, initialize_backend, LightAuthoritySet, NextChangeInAuthority};
     use crate::storage::IBCStorage;
     use crate::types::{Block, Header};
-    use crate::{ingest_finalized_header, initialize_db};
+    use crate::{ingest_finalized_header, initialize_db, current_status};
     use clear_on_drop::clear::Clear;
     use finality_grandpa::{Commit, SignedPrecommit};
     use parity_scale_codec::alloc::sync::Arc;
@@ -108,6 +121,7 @@ mod tests {
     use sp_keyring::Ed25519Keyring;
     use sp_runtime::traits::{Block as BlockT, HashFor, Header as HeaderT, NumberFor, One};
     use sp_runtime::DigestItem;
+    use std::hash::Hash;
 
     fn init_test_db(custom_authority_set: Option<LightAuthoritySet>) -> (Vec<u8>, Header) {
         let initial_header = Header::new(
@@ -133,6 +147,39 @@ mod tests {
         next_header.number += 1;
         next_header.parent_hash = header.hash();
         next_header
+    }
+
+    fn assert_finalized_header(encoded_data: Vec<u8>, expected_to_be_finalized: &Header) {
+        let result = current_status::<Block>(encoded_data.clone());
+        assert!(result.is_ok());
+        let status = result.unwrap();
+        assert!(status.possible_finalized_header.is_some());
+        assert_eq!(status.possible_finalized_header.unwrap().hash(), expected_to_be_finalized.hash());
+    }
+
+    fn assert_authority_set(encoded_data: Vec<u8>, expected_light_authority_set: &LightAuthoritySet) {
+        let result = current_status::<Block>(encoded_data.clone());
+        assert!(result.is_ok());
+        let status = result.unwrap();
+        assert!(status.possible_light_authority_set.is_some());
+        let light_authority_set = status.possible_light_authority_set.unwrap();
+        assert_eq!(light_authority_set.set_id(), expected_light_authority_set.set_id());
+        assert_eq!(light_authority_set.authorities(), expected_light_authority_set.authorities());
+    }
+
+    fn assert_next_change_in_authority(encoded_data: Vec<u8>, scheduled_change: &ScheduledChange<NumberFor<Block>>) {
+        let result = current_status::<Block>(encoded_data.clone());
+        assert!(result.is_ok());
+        let status = result.unwrap();
+        assert!(status.possible_next_change_in_authority.is_some());
+        assert_eq!(&status.possible_next_change_in_authority.unwrap().change, scheduled_change);
+    }
+
+    fn assert_no_next_change_in_authority(encoded_data: Vec<u8>) {
+        let result = current_status::<Block>(encoded_data.clone());
+        assert!(result.is_ok());
+        let status = result.unwrap();
+        assert!(status.possible_next_change_in_authority.is_none());
     }
 
     #[test]
@@ -192,24 +239,9 @@ mod tests {
             .1;
 
         // We should now have next schedule change in database
-        let (backend, ibc_data) = initialize_backend(encoded_data, 256).unwrap();
-        let possible_next_authority_change =
-            fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
-        assert!(possible_next_authority_change.is_some());
-        let next_authority_change = possible_next_authority_change.unwrap();
-        assert_eq!(next_authority_change.change, change);
-
+        assert_next_change_in_authority(encoded_data.clone(), &change);
         // Current authority set remains same
-        let possible_current_authority_set = fetch_light_authority_set(backend.clone()).unwrap();
-        assert!(possible_current_authority_set.is_some());
-        let current_authority_set = possible_current_authority_set.unwrap();
-        assert_eq!(current_authority_set.set_id(), 0);
-        assert_eq!(current_authority_set.authorities(), vec![]);
-
-        // It is not necessary to derive encoded data here,
-        // we are doing it just for the sake of highlighting
-        // how encoded data is updated.
-        let encoded_data = ibc_data.encode();
+        assert_authority_set(encoded_data.clone(), &LightAuthoritySet::new(0, vec![]));
 
         // We cannot push another authority set while previous one exists
         let mut next_header = create_next_header(next_header);
@@ -258,22 +290,13 @@ mod tests {
         // by new change
 
         // Previous change has been overwritten by new change
-        let (backend, _) = initialize_backend(encoded_data.clone(), 256).unwrap();
-        let possible_next_authority_change =
-            fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
-        assert!(possible_next_authority_change.is_some());
-        let next_authority_change = possible_next_authority_change.unwrap();
-        assert_eq!(new_change, next_authority_change.change);
+        assert_next_change_in_authority(encoded_data.clone(), &new_change);
 
         // We now have authority set enacted as per previous change
-        let possible_current_authority_set = fetch_light_authority_set(backend.clone()).unwrap();
-        assert!(possible_current_authority_set.is_some());
-        let current_authority_set = possible_current_authority_set.unwrap();
         // Last authority set had set_id of 0
         // so while ingesting new authority set it
         // was incremented by 1.
-        assert_eq!(current_authority_set.set_id(), 1);
-        assert_eq!(current_authority_set.authorities(), change.next_authorities);
+        assert_authority_set(encoded_data.clone(), &LightAuthoritySet::new(1, change.next_authorities.clone()));
 
         // Now, a scenario where scheduled change isn't part of digest after two blocks delay
         // In this case new authority set will be enacted and aux entry will be removed
@@ -287,22 +310,13 @@ mod tests {
         let encoded_data = result.unwrap().1;
 
         // new change still same
-        let (backend, _) = initialize_backend(encoded_data.clone(), 256).unwrap();
-        let possible_next_authority_change =
-            fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
-        assert!(possible_next_authority_change.is_some());
-        let next_authority_change = possible_next_authority_change.unwrap();
-        assert_eq!(new_change, next_authority_change.change);
+        assert_next_change_in_authority(encoded_data.clone(), &new_change);
 
         // authority set still same
-        let possible_current_authority_set = fetch_light_authority_set(backend.clone()).unwrap();
-        assert!(possible_current_authority_set.is_some());
-        let current_authority_set = possible_current_authority_set.unwrap();
         // Last authority set had set_id of 0
         // so while ingesting new authority set it
         // was incremented by 1.
-        assert_eq!(current_authority_set.set_id(), 1);
-        assert_eq!(current_authority_set.authorities(), change.next_authorities);
+        assert_authority_set(encoded_data.clone(), &LightAuthoritySet::new(1, change.next_authorities.clone()));
 
         let mut next_header = create_next_header(next_header.clone());
         let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None, 256);
@@ -311,23 +325,13 @@ mod tests {
         let encoded_data = result.unwrap().1;
 
         // Now NextChangeInAuthority should be removed from db and authority set is changed
-        let (backend, _) = initialize_backend(encoded_data.clone(), 256).unwrap();
-        let possible_next_authority_change =
-            fetch_next_authority_change::<_, Block>(backend.clone()).unwrap();
-        assert!(possible_next_authority_change.is_none());
+        assert_no_next_change_in_authority(encoded_data.clone());
 
         // Brand new authority set
-        let possible_current_authority_set = fetch_light_authority_set(backend.clone()).unwrap();
-        assert!(possible_current_authority_set.is_some());
-        let current_authority_set = possible_current_authority_set.unwrap();
         // Last authority set had set_id of 1
         // so while ingesting new authority set it
         // was incremented by 1.
-        assert_eq!(current_authority_set.set_id(), 2);
-        assert_eq!(
-            current_authority_set.authorities(),
-            new_change.next_authorities
-        );
+        assert_authority_set(encoded_data.clone(), &LightAuthoritySet::new(2, new_change.next_authorities.clone()));
     }
 
     #[derive(Encode, Decode)]
@@ -400,9 +404,7 @@ mod tests {
         assert!(result.is_ok());
 
         let encoded_data = result.unwrap().1;
-        let (backend, _ibc_data) = initialize_backend(encoded_data.clone(), 256).unwrap();
-        let storage = backend.blockchain().storage();
-        assert!(Storage::<Block>::last_finalized(storage).unwrap() == second_header.hash());
+        assert_finalized_header(encoded_data.clone(), &second_header);
 
         let third_header = create_next_header(second_header.clone());
         let result = ingest_finalized_header(encoded_data.clone(), third_header.clone(), None, 256);
@@ -456,8 +458,6 @@ mod tests {
 
         // All blocks including fifth one should be finalized
         let encoded_data = result.unwrap().1;
-        let (backend, _ibc_data) = initialize_backend(encoded_data.clone(), 256).unwrap();
-        let storage = backend.blockchain().storage();
-        assert!(Storage::<Block>::last_finalized(storage).unwrap() == fifth_header.hash());
+        assert_finalized_header(encoded_data.clone(), &fifth_header);
     }
 }
