@@ -1,6 +1,6 @@
 use crate::db;
 use crate::storage::IBCStorage;
-use crate::types::Block;
+use crate::types::{Block, Header};
 use parity_scale_codec::alloc::sync::Arc;
 use parity_scale_codec::{Decode, Encode};
 use sc_client::light::backend::Backend;
@@ -74,6 +74,15 @@ where
             change,
         }
     }
+}
+
+pub struct Status<Block>
+where
+    Block: BlockT,
+{
+    pub possible_finalized_header: Option<Block::Header>,
+    pub possible_light_authority_set: Option<LightAuthoritySet>,
+    pub possible_next_change_in_authority: Option<NextChangeInAuthority<Block>>,
 }
 
 pub fn initialize_backend(
