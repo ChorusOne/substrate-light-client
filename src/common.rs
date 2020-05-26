@@ -76,10 +76,13 @@ where
     }
 }
 
-pub struct Status<Block> where Block: BlockT {
+pub struct Status<Block>
+where
+    Block: BlockT,
+{
     pub possible_finalized_header: Option<Block::Header>,
     pub possible_light_authority_set: Option<LightAuthoritySet>,
-    pub possible_next_change_in_authority: Option<NextChangeInAuthority<Block>>
+    pub possible_next_change_in_authority: Option<NextChangeInAuthority<Block>>,
 }
 
 pub fn initialize_backend(

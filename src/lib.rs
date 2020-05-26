@@ -11,17 +11,20 @@ mod types;
 mod verifier;
 
 use crate::block_processor::setup_block_processor;
-use crate::common::{initialize_backend, insert_light_authority_set, LightAuthoritySet, NUM_COLUMNS, fetch_light_authority_set, Status, fetch_next_authority_change};
+use crate::common::{
+    fetch_light_authority_set, fetch_next_authority_change, initialize_backend,
+    insert_light_authority_set, LightAuthoritySet, Status, NUM_COLUMNS,
+};
 use crate::db::create;
 use crate::genesis::GenesisData;
 use crate::types::{Block, Header};
 use parity_scale_codec::Encode;
 use sc_client_api::{Backend, BlockImportOperation, NewBlockState};
+use sp_api::BlockId;
 use sp_blockchain::{Error as BlockchainError, HeaderBackend, Info};
 use sp_consensus::import_queue::{BlockImportResult, IncomingBlock};
-use sp_runtime::traits::{NumberFor, Block as BlockT};
+use sp_runtime::traits::{Block as BlockT, NumberFor};
 use sp_runtime::Justification;
-use sp_api::BlockId;
 
 // WASM entry point need to call this function
 pub fn initialize_db(
@@ -46,20 +49,25 @@ pub fn initialize_db(
     Ok(ibc_data.encode())
 }
 
-pub fn current_status<Block>(encoded_data: Vec<u8>) -> Result<Status<Block>, BlockchainError> where Block: BlockT {
+pub fn current_status<Block>(encoded_data: Vec<u8>) -> Result<Status<Block>, BlockchainError>
+where
+    Block: BlockT,
+{
     let (backend, _) = initialize_backend(encoded_data, 1)?;
     let possible_light_authority_set = fetch_light_authority_set(backend.clone())?;
     let mut possible_finalized_header: Option<Block::Header> = None;
     let info: Info<Block> = backend.blockchain().info();
     if info.finalized_hash != Default::default() {
-        possible_finalized_header = backend.blockchain().header(BlockId::<Block>::Hash(info.finalized_hash))?;
+        possible_finalized_header = backend
+            .blockchain()
+            .header(BlockId::<Block>::Hash(info.finalized_hash))?;
     }
     let possible_next_change_in_authority = fetch_next_authority_change(backend.clone())?;
 
-    Ok(Status{
+    Ok(Status {
         possible_finalized_header,
         possible_light_authority_set,
-        possible_next_change_in_authority
+        possible_next_change_in_authority,
     })
 }
 
@@ -102,10 +110,13 @@ pub fn ingest_finalized_header(
 
 #[cfg(test)]
 mod tests {
-    use crate::common::{fetch_light_authority_set, fetch_next_authority_change, initialize_backend, LightAuthoritySet, NextChangeInAuthority};
+    use crate::common::{
+        fetch_light_authority_set, fetch_next_authority_change, initialize_backend,
+        LightAuthoritySet, NextChangeInAuthority,
+    };
     use crate::storage::IBCStorage;
     use crate::types::{Block, Header};
-    use crate::{ingest_finalized_header, initialize_db, current_status};
+    use crate::{current_status, ingest_finalized_header, initialize_db};
     use clear_on_drop::clear::Clear;
     use finality_grandpa::{Commit, SignedPrecommit};
     use parity_scale_codec::alloc::sync::Arc;
@@ -154,25 +165,43 @@ mod tests {
         assert!(result.is_ok());
         let status = result.unwrap();
         assert!(status.possible_finalized_header.is_some());
-        assert_eq!(status.possible_finalized_header.unwrap().hash(), expected_to_be_finalized.hash());
+        assert_eq!(
+            status.possible_finalized_header.unwrap().hash(),
+            expected_to_be_finalized.hash()
+        );
     }
 
-    fn assert_authority_set(encoded_data: Vec<u8>, expected_light_authority_set: &LightAuthoritySet) {
+    fn assert_authority_set(
+        encoded_data: Vec<u8>,
+        expected_light_authority_set: &LightAuthoritySet,
+    ) {
         let result = current_status::<Block>(encoded_data.clone());
         assert!(result.is_ok());
         let status = result.unwrap();
         assert!(status.possible_light_authority_set.is_some());
         let light_authority_set = status.possible_light_authority_set.unwrap();
-        assert_eq!(light_authority_set.set_id(), expected_light_authority_set.set_id());
-        assert_eq!(light_authority_set.authorities(), expected_light_authority_set.authorities());
+        assert_eq!(
+            light_authority_set.set_id(),
+            expected_light_authority_set.set_id()
+        );
+        assert_eq!(
+            light_authority_set.authorities(),
+            expected_light_authority_set.authorities()
+        );
     }
 
-    fn assert_next_change_in_authority(encoded_data: Vec<u8>, scheduled_change: &ScheduledChange<NumberFor<Block>>) {
+    fn assert_next_change_in_authority(
+        encoded_data: Vec<u8>,
+        scheduled_change: &ScheduledChange<NumberFor<Block>>,
+    ) {
         let result = current_status::<Block>(encoded_data.clone());
         assert!(result.is_ok());
         let status = result.unwrap();
         assert!(status.possible_next_change_in_authority.is_some());
-        assert_eq!(&status.possible_next_change_in_authority.unwrap().change, scheduled_change);
+        assert_eq!(
+            &status.possible_next_change_in_authority.unwrap().change,
+            scheduled_change
+        );
     }
 
     fn assert_no_next_change_in_authority(encoded_data: Vec<u8>) {
@@ -296,7 +325,10 @@ mod tests {
         // Last authority set had set_id of 0
         // so while ingesting new authority set it
         // was incremented by 1.
-        assert_authority_set(encoded_data.clone(), &LightAuthoritySet::new(1, change.next_authorities.clone()));
+        assert_authority_set(
+            encoded_data.clone(),
+            &LightAuthoritySet::new(1, change.next_authorities.clone()),
+        );
 
         // Now, a scenario where scheduled change isn't part of digest after two blocks delay
         // In this case new authority set will be enacted and aux entry will be removed
@@ -316,7 +348,10 @@ mod tests {
         // Last authority set had set_id of 0
         // so while ingesting new authority set it
         // was incremented by 1.
-        assert_authority_set(encoded_data.clone(), &LightAuthoritySet::new(1, change.next_authorities.clone()));
+        assert_authority_set(
+            encoded_data.clone(),
+            &LightAuthoritySet::new(1, change.next_authorities.clone()),
+        );
 
         let mut next_header = create_next_header(next_header.clone());
         let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None, 256);
@@ -331,7 +366,10 @@ mod tests {
         // Last authority set had set_id of 1
         // so while ingesting new authority set it
         // was incremented by 1.
-        assert_authority_set(encoded_data.clone(), &LightAuthoritySet::new(2, new_change.next_authorities.clone()));
+        assert_authority_set(
+            encoded_data.clone(),
+            &LightAuthoritySet::new(2, new_change.next_authorities.clone()),
+        );
     }
 
     #[derive(Encode, Decode)]
