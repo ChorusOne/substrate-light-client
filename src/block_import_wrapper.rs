@@ -12,7 +12,7 @@ use sp_runtime::traits::Block as BlockT;
 use std::ops::Deref;
 
 // Wrapper around grandpa block import, which is mainly used to do
-// some ibc client specific book-keeping.
+// some client specific book-keeping.
 pub struct BlockImportWrapper<Inner, AuxStore> {
     wrapped_block_import: Inner,
     aux_store: Arc<AuxStore>,

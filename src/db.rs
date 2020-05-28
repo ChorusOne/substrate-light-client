@@ -138,7 +138,7 @@ impl Decode for DB {
     fn decode<I: Input>(value: &mut I) -> Result<Self, Error> {
         let length = u32::decode(value)?;
 
-        let mut ibcdb = DB::default();
+        let mut db = DB::default();
         let mut map: HashMap<u32, BTreeMap<Vec<u8>, DBValue>> = HashMap::new();
 
         for i in 0..length {
@@ -146,9 +146,9 @@ impl Decode for DB {
             map.insert(i, v);
         }
 
-        ibcdb.columns = Arc::new(RwLock::new(map));
+        db.columns = Arc::new(RwLock::new(map));
 
-        return Ok(ibcdb);
+        return Ok(db);
     }
 }
 
@@ -256,7 +256,7 @@ mod tests {
             genesis_data: GenesisData {},
         };
 
-        // First test: If two IBCData instance are identical, their
+        // First test: If two Data instance are identical, their
         // deserialization need to produce same binary data.
         for _i in 0..100 {
             // Serialization
