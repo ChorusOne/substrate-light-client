@@ -32,21 +32,21 @@ pub fn initialize_db(
     initial_authority_set: LightAuthoritySet,
 ) -> Result<Vec<u8>, BlockchainError> {
     let db = create(NUM_COLUMNS);
-    let new_ibc_data = crate::db::IBCData {
+    let new_data = crate::db::Data {
         db,
         genesis_data: GenesisData {},
     };
-    let empty_data = new_ibc_data.encode();
-    let (backend, ibc_data) = initialize_backend(empty_data, 1)?;
+    let empty_data = new_data.encode();
+    let (backend, data) = initialize_backend(empty_data, 1)?;
     insert_light_authority_set(backend.clone(), initial_authority_set)?;
 
     // Ingest initial header
-    let mut backend_op: sc_client::light::backend::ImportOperation<Block, storage::IBCStorage> =
+    let mut backend_op: sc_client::light::backend::ImportOperation<Block, storage::Storage> =
         backend.begin_operation()?;
     backend_op.set_block_data(initial_header, None, None, NewBlockState::Best)?;
     backend.commit_operation(backend_op)?;
 
-    Ok(ibc_data.encode())
+    Ok(data.encode())
 }
 
 pub fn current_status<Block>(encoded_data: Vec<u8>) -> Result<Status<Block>, BlockchainError>
@@ -78,7 +78,7 @@ pub fn ingest_finalized_header(
     justification: Option<Justification>,
     max_non_finalized_blocks_allowed: u64,
 ) -> Result<(BlockImportResult<NumberFor<Block>>, Vec<u8>), String> {
-    let (mut block_processor_fn, ibc_data) =
+    let (mut block_processor_fn, data) =
         setup_block_processor(encoded_data, max_non_finalized_blocks_allowed)
             .map_err(|e| format!("{}", e))?;
     let incoming_block = IncomingBlock {
@@ -105,7 +105,7 @@ pub fn ingest_finalized_header(
             }
         }
     }
-    Ok((block_import_response, ibc_data.encode()))
+    Ok((block_import_response, data.encode()))
 }
 
 #[cfg(test)]
@@ -114,7 +114,7 @@ mod tests {
         fetch_light_authority_set, fetch_next_authority_change, initialize_backend,
         LightAuthoritySet, NextChangeInAuthority,
     };
-    use crate::storage::IBCStorage;
+    use crate::storage::Storage;
     use crate::types::{Block, Header};
     use crate::{current_status, ingest_finalized_header, initialize_db};
     use clear_on_drop::clear::Clear;

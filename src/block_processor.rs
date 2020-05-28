@@ -5,7 +5,7 @@ use crate::db;
 use crate::dummy_objs::DummyCallExecutor;
 use crate::dummy_objs::{DummyFetchChecker, DummyGenesisGrandpaAuthoritySetProvider};
 use crate::runtime::RuntimeApiConstructor;
-use crate::storage::IBCStorage;
+use crate::storage::Storage;
 use crate::types::Block;
 use crate::verifier::GrandpaVerifier;
 use sc_client_api::FetchChecker;
@@ -22,15 +22,15 @@ pub type BlockProcessor<B> =
 pub fn setup_block_processor(
     encoded_data: Vec<u8>,
     max_non_finalized_blocks_allowed: u64,
-) -> ClientResult<(BlockProcessor<Block>, db::IBCData)> {
+) -> ClientResult<(BlockProcessor<Block>, db::Data)> {
     // This dummy genesis provider will panic, if auxiliary storage
     // does not contain authority set at LIGHT_AUTHORITY_SET_KEY.
     let dummy_grandpa_genesis_authority_set_provider = DummyGenesisGrandpaAuthoritySetProvider {};
 
-    let (backend, ibc_data) = initialize_backend(encoded_data, max_non_finalized_blocks_allowed)?;
+    let (backend, data) = initialize_backend(encoded_data, max_non_finalized_blocks_allowed)?;
 
     // Custom client implementation with dummy runtime
-    let client: Arc<Client<_, _, RuntimeApiConstructor, DummyCallExecutor<Block, IBCStorage>>> =
+    let client: Arc<Client<_, _, RuntimeApiConstructor, DummyCallExecutor<Block, Storage>>> =
         Arc::new(Client::new(backend.clone(), true));
 
     // This is to prevent grandpa light import queue to accidentally
@@ -64,5 +64,5 @@ pub fn setup_block_processor(
         .map_err(|e| format!("{:?}", e))
     });
 
-    Ok((block_processor_fn, ibc_data))
+    Ok((block_processor_fn, data))
 }
