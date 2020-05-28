@@ -121,7 +121,7 @@ mod tests {
     use finality_grandpa::{Commit, SignedPrecommit};
     use parity_scale_codec::alloc::sync::Arc;
     use parity_scale_codec::{Decode, Encode};
-    use sc_client_api::Storage;
+    use sc_client_api::Storage as StorageT;
     use sc_finality_grandpa::{AuthorityId, Message, Precommit};
     use sp_blockchain::Backend;
     use sp_core::crypto::Public;

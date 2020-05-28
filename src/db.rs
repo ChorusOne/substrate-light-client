@@ -265,10 +265,7 @@ mod tests {
             // Deserialization
             let decoded_data = Data::decode(&mut encoded_data.as_slice()).unwrap();
             // Deserialization need to produce same data every time
-            assert_eq!(
-                encoded_data.as_slice(),
-                decoded_data.encode().as_slice()
-            );
+            assert_eq!(encoded_data.as_slice(), decoded_data.encode().as_slice());
         }
 
         // Second test: If two instances of DBs are created from same binary blob,
@@ -286,10 +283,7 @@ mod tests {
         // Insert into an instance created from previous state of original db
         assert!(decoded_data.db.write(duplicate_transaction).is_ok());
 
-        assert_eq!(
-            data.encode().as_slice(),
-            decoded_data.encode().as_slice()
-        );
+        assert_eq!(data.encode().as_slice(), decoded_data.encode().as_slice());
     }
 
     #[test]
