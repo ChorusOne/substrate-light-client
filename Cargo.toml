@@ -1,5 +1,5 @@
 [package]
-name = "substrate_ibc_client"
+name = "substrate_client"
 version = "0.1.0"
 authors = ["Chorus One"]
 edition = "2018"
