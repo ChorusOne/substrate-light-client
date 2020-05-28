@@ -1,2 +1,2 @@
-# substrate-ibc-client
-Implementation of substrate ibc client in rust compilable to wasm. 
+# substrate-client
+Implementation of substrate client in rust compilable to wasm. 

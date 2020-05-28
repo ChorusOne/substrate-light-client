@@ -3370,7 +3370,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "substrate_ibc_client"
+name = "substrate_client"
 version = "0.1.0"
 dependencies = [
  "clear_on_drop",

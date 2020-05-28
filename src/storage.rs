@@ -1,10 +1,10 @@
-use crate::db::IBCData;
+use crate::db::Data;
 use kvdb::{DBTransaction, KeyValueDB};
 use parity_scale_codec::alloc::collections::HashMap;
 use parity_scale_codec::alloc::sync::Arc;
 use parity_scale_codec::{Decode, Encode};
 use sc_client::light::blockchain::BlockchainCache;
-use sc_client_api::{AuxStore, NewBlockState, Storage, UsageInfo};
+use sc_client_api::{AuxStore, NewBlockState, Storage as StorageT, UsageInfo};
 use sp_blockchain::{
     well_known_cache_keys, BlockStatus, CachedHeaderMetadata, HeaderBackend, HeaderMetadata, Info,
 };
@@ -18,11 +18,11 @@ const HEADER_COLUMN: u32 = 1;
 const AUX_COLUMN: u32 = 2;
 const LOOKUP_COLUMN: u32 = 3;
 
-const META_KEY: &[u8] = b"ibc_meta";
+const META_KEY: &[u8] = b"meta";
 
 /// Database metadata.
 #[derive(Debug, Encode, Decode)]
-struct IBCStorageMeta<N, H>
+struct StorageMeta<N, H>
 where
     N: Encode + Decode,
     H: Encode + Decode,
@@ -49,20 +49,20 @@ fn codec_error(err: parity_scale_codec::Error) -> sp_blockchain::Error {
     sp_blockchain::Error::CallResultDecode("", err)
 }
 
-pub struct IBCStorage {
-    data: IBCData,
+pub struct Storage {
+    data: Data,
     max_non_finalized_blocks_allowed: u64,
 }
 
-impl IBCStorage {
-    pub fn new(ibc_data: IBCData, max_non_finalized_blocks_allowed: u64) -> Self {
+impl Storage {
+    pub fn new(data: Data, max_non_finalized_blocks_allowed: u64) -> Self {
         Self {
-            data: ibc_data,
+            data,
             max_non_finalized_blocks_allowed,
         }
     }
 
-    fn fetch_meta<N, H>(&self) -> ClientResult<Option<IBCStorageMeta<N, H>>>
+    fn fetch_meta<N, H>(&self) -> ClientResult<Option<StorageMeta<N, H>>>
     where
         N: Encode + Decode,
         H: Encode + Decode,
@@ -73,12 +73,12 @@ impl IBCStorage {
         } else {
             let encoded_meta = possible_encoded_meta.unwrap();
             Ok(Some(
-                IBCStorageMeta::decode(&mut encoded_meta.as_slice()).map_err(codec_error)?,
+                StorageMeta::decode(&mut encoded_meta.as_slice()).map_err(codec_error)?,
             ))
         }
     }
 
-    fn store_meta<N, H>(&self, meta: IBCStorageMeta<N, H>) -> ClientResult<()>
+    fn store_meta<N, H>(&self, meta: StorageMeta<N, H>) -> ClientResult<()>
     where
         N: Encode + Decode,
         H: Encode + Decode,
@@ -88,7 +88,7 @@ impl IBCStorage {
         self.data.db.write(tx).map_err(db_err)
     }
 
-    fn tx_store_meta<N, H>(tx: &mut DBTransaction, meta: &IBCStorageMeta<N, H>)
+    fn tx_store_meta<N, H>(tx: &mut DBTransaction, meta: &StorageMeta<N, H>)
     where
         N: Encode + Decode,
         H: Encode + Decode,
@@ -160,7 +160,7 @@ impl IBCStorage {
     }
 }
 
-impl AuxStore for IBCStorage {
+impl AuxStore for Storage {
     fn insert_aux<
         'a,
         'b: 'a,
@@ -189,7 +189,7 @@ impl AuxStore for IBCStorage {
     }
 }
 
-impl<Block> HeaderBackend<Block> for IBCStorage
+impl<Block> HeaderBackend<Block> for Storage
 where
     Block: BlockT,
 {
@@ -272,7 +272,7 @@ where
     }
 }
 
-impl<Block> Storage<Block> for IBCStorage
+impl<Block> StorageT<Block> for Storage
 where
     Block: BlockT,
 {
@@ -293,8 +293,8 @@ where
         );
 
         let possible_meta = self.fetch_meta()?;
-        let mut meta: IBCStorageMeta<NumberFor<Block>, Block::Hash> = if possible_meta.is_none() {
-            IBCStorageMeta {
+        let mut meta: StorageMeta<NumberFor<Block>, Block::Hash> = if possible_meta.is_none() {
+            StorageMeta {
                 best_hash: Default::default(),
                 best_number: Zero::zero(),
                 finalized_hash: Default::default(),
@@ -377,7 +377,7 @@ where
                 "Unable to get metadata about blockchain"
             )));
         }
-        let mut meta: IBCStorageMeta<NumberFor<Block>, Block::Hash> = possible_meta.unwrap();
+        let mut meta: StorageMeta<NumberFor<Block>, Block::Hash> = possible_meta.unwrap();
         let first_block_to_be_finalized = meta.finalized_hash == Default::default();
 
         if (!first_block_to_be_finalized
@@ -401,7 +401,7 @@ where
 
     /// Get last finalized header.
     fn last_finalized(&self) -> ClientResult<Block::Hash> {
-        let possible_meta: Option<IBCStorageMeta<NumberFor<Block>, Block::Hash>> =
+        let possible_meta: Option<StorageMeta<NumberFor<Block>, Block::Hash>> =
             self.fetch_meta()?;
         if possible_meta.is_none() {
             return Err(ClientError::Backend(format!(
@@ -441,7 +441,7 @@ where
     }
 }
 
-impl<Block> HeaderMetadata<Block> for IBCStorage
+impl<Block> HeaderMetadata<Block> for Storage
 where
     Block: BlockT,
 {

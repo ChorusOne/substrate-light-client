@@ -10,7 +10,7 @@ use crate::genesis::GenesisData;
 use parity_scale_codec::alloc::sync::Arc;
 
 #[derive(Encode, Decode, Clone)]
-pub struct IBCData {
+pub struct Data {
     pub db: DB,
     pub genesis_data: GenesisData,
 }
@@ -138,7 +138,7 @@ impl Decode for DB {
     fn decode<I: Input>(value: &mut I) -> Result<Self, Error> {
         let length = u32::decode(value)?;
 
-        let mut ibcdb = DB::default();
+        let mut db = DB::default();
         let mut map: HashMap<u32, BTreeMap<Vec<u8>, DBValue>> = HashMap::new();
 
         for i in 0..length {
@@ -146,9 +146,9 @@ impl Decode for DB {
             map.insert(i, v);
         }
 
-        ibcdb.columns = Arc::new(RwLock::new(map));
+        db.columns = Arc::new(RwLock::new(map));
 
-        return Ok(ibcdb);
+        return Ok(db);
     }
 }
 
@@ -159,7 +159,7 @@ mod tests {
     use kvdb::KeyValueDB;
     use parity_scale_codec::{Decode, Encode};
 
-    use crate::db::{create, IBCData, DB};
+    use crate::db::{create, Data, DB};
     use crate::genesis::GenesisData;
 
     #[test]
@@ -181,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn ibc_data_encode_decode() {
+    fn data_encode_decode() {
         let db = create(2);
         let mut transaction = db.transaction();
         transaction.put(0, b"key1", b"horse");
@@ -189,15 +189,15 @@ mod tests {
         transaction.put(1, b"key3", b"cat");
         assert!(db.write(transaction).is_ok());
 
-        let ibc_data = IBCData {
+        let data = Data {
             db,
             genesis_data: GenesisData {},
         };
 
-        let encoded_ibc_data = ibc_data.encode();
-        assert!(encoded_ibc_data.len() > 0);
-        let decoded_ibc_data = IBCData::decode(&mut encoded_ibc_data.as_slice()).unwrap();
-        let decoded_db = decoded_ibc_data.db;
+        let data = data.encode();
+        assert!(data.len() > 0);
+        let decoded_data = Data::decode(&mut data.as_slice()).unwrap();
+        let decoded_db = decoded_data.db;
 
         assert_eq!(decoded_db.get(0, b"key1").unwrap().unwrap(), b"horse");
         assert_eq!(decoded_db.get(1, b"key2").unwrap().unwrap(), b"pigeon");
@@ -243,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn ibc_data_deterministic_encode_decode() {
+    fn data_deterministic_encode_decode() {
         let db = create(2);
         let mut transaction = db.transaction();
         transaction.put(0, b"key1", b"horse");
@@ -251,44 +251,44 @@ mod tests {
         transaction.put(1, b"key3", b"cat");
         assert!(db.write(transaction).is_ok());
 
-        let mut ibc_data = IBCData {
+        let mut data = Data {
             db,
             genesis_data: GenesisData {},
         };
 
-        // First test: If two IBCData instance are identical, their
+        // First test: If two Data instance are identical, their
         // deserialization need to produce same binary data.
         for _i in 0..100 {
             // Serialization
-            let encoded_ibc_data = ibc_data.encode();
-            assert!(encoded_ibc_data.len() > 0);
+            let encoded_data = data.encode();
+            assert!(encoded_data.len() > 0);
             // Deserialization
-            let decoded_ibc_data = IBCData::decode(&mut encoded_ibc_data.as_slice()).unwrap();
+            let decoded_data = Data::decode(&mut encoded_data.as_slice()).unwrap();
             // Deserialization need to produce same data every time
             assert_eq!(
-                encoded_ibc_data.as_slice(),
-                decoded_ibc_data.encode().as_slice()
+                encoded_data.as_slice(),
+                decoded_data.encode().as_slice()
             );
         }
 
         // Second test: If two instances of DBs are created from same binary blob,
         // and if we insert same data on both instance, then
         // both instance should produce same binary blob
-        let encoded_ibc_data = ibc_data.encode();
-        let mut decoded_ibc_data = IBCData::decode(&mut encoded_ibc_data.as_slice()).unwrap();
+        let encoded_data = data.encode();
+        let mut decoded_data = Data::decode(&mut encoded_data.as_slice()).unwrap();
 
-        let mut transaction = ibc_data.db.transaction();
+        let mut transaction = data.db.transaction();
         transaction.put(0, b"another_format", b"pikachu");
         let duplicate_transaction = transaction.clone();
         // Insert into original db
-        assert!(ibc_data.db.write(transaction).is_ok());
+        assert!(data.db.write(transaction).is_ok());
 
         // Insert into an instance created from previous state of original db
-        assert!(decoded_ibc_data.db.write(duplicate_transaction).is_ok());
+        assert!(decoded_data.db.write(duplicate_transaction).is_ok());
 
         assert_eq!(
-            ibc_data.encode().as_slice(),
-            decoded_ibc_data.encode().as_slice()
+            data.encode().as_slice(),
+            decoded_data.encode().as_slice()
         );
     }
 
