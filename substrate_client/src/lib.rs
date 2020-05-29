@@ -64,7 +64,9 @@ where
             .header(BlockId::<Block>::Hash(info.finalized_hash))?;
     }
     if info.best_hash != Default::default() {
-        possible_best_header = backend.blockchain().header(BlockId::<Block>::Hash(info.best_hash))?;
+        possible_best_header = backend
+            .blockchain()
+            .header(BlockId::<Block>::Hash(info.best_hash))?;
     }
     let possible_next_change_in_authority = fetch_next_authority_change(backend.clone())?;
 
@@ -72,7 +74,7 @@ where
         possible_finalized_header,
         possible_light_authority_set,
         possible_next_change_in_authority,
-        possible_best_header
+        possible_best_header,
     })
 }
 
