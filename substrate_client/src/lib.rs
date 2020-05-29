@@ -56,11 +56,15 @@ where
     let (backend, _) = initialize_backend(encoded_data, 1)?;
     let possible_light_authority_set = fetch_light_authority_set(backend.clone())?;
     let mut possible_finalized_header: Option<Block::Header> = None;
+    let mut possible_best_header: Option<Block::Header> = None;
     let info: Info<Block> = backend.blockchain().info();
     if info.finalized_hash != Default::default() {
         possible_finalized_header = backend
             .blockchain()
             .header(BlockId::<Block>::Hash(info.finalized_hash))?;
+    }
+    if info.best_hash != Default::default() {
+        possible_best_header = backend.blockchain().header(BlockId::<Block>::Hash(info.best_hash))?;
     }
     let possible_next_change_in_authority = fetch_next_authority_change(backend.clone())?;
 
@@ -68,6 +72,7 @@ where
         possible_finalized_header,
         possible_light_authority_set,
         possible_next_change_in_authority,
+        possible_best_header
     })
 }
 
