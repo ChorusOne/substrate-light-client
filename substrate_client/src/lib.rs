@@ -141,7 +141,9 @@ mod tests {
     use sp_runtime::{DigestItem, Justification};
     use std::hash::Hash;
 
-    fn test_init_db(custom_authority_set: Option<LightAuthoritySet>) -> (Vec<u8>, Header) {
+    fn assert_successful_db_init(
+        custom_authority_set: Option<LightAuthoritySet>,
+    ) -> (Vec<u8>, Header) {
         let initial_header = Header::new(
             One::one(),
             Default::default(),
@@ -259,14 +261,14 @@ mod tests {
 
     #[test]
     fn test_initialize_db_success() {
-        let (encoded_data, initial_header) = test_init_db(None);
+        let (encoded_data, initial_header) = assert_successful_db_init(None);
         let mut next_header = create_next_header(initial_header);
         assert_successful_header_ingestion(encoded_data, next_header, None);
     }
 
     #[test]
     fn test_initialize_db_non_sequential_block() {
-        let (encoded_data, initial_header) = test_init_db(None);
+        let (encoded_data, initial_header) = assert_successful_db_init(None);
 
         let mut next_header = create_next_header(initial_header);
         // Let's change number of block to be non sequential
@@ -277,7 +279,7 @@ mod tests {
 
     #[test]
     fn test_initialize_db_wrong_parent_hash() {
-        let (encoded_data, initial_header) = test_init_db(None);
+        let (encoded_data, initial_header) = assert_successful_db_init(None);
 
         let mut next_header = create_next_header(initial_header);
         // Setting wrong parent hash
@@ -294,7 +296,7 @@ mod tests {
     #[test]
     fn test_authority_set_processing() {
         println!("Starting Authority set processing test");
-        let (encoded_data, initial_header) = test_init_db(None);
+        let (encoded_data, initial_header) = assert_successful_db_init(None);
 
         let mut next_header = create_next_header(initial_header);
 
@@ -433,7 +435,8 @@ mod tests {
         let voters = make_ids(peers);
         let genesis_authority_set = LightAuthoritySet::new(0, voters);
 
-        let (encoded_data, initial_header) = test_init_db(Some(genesis_authority_set.clone()));
+        let (encoded_data, initial_header) =
+            assert_successful_db_init(Some(genesis_authority_set.clone()));
         let first_header = create_next_header(initial_header.clone());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, first_header.clone(), None);
