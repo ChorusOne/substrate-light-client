@@ -9,24 +9,61 @@ edition = "2018"
 [dependencies]
 kvdb = "0.5.0"
 finality-grandpa = {version = "0.12.3", features = ["derive-codec"] }
-sp-runtime = "2.0.0-alpha.6"
+sp-runtime = "=2.0.0-alpha.6"
 parity-scale-codec = "1.3.0"
 parity-scale-codec-derive = "1.2.0"
 parity-util-mem = "0.6.1"
 parking_lot = "0.10.2"
-sc-client = "0.8.0-alpha.6"
-sp-consensus = "0.8.0-alpha.6"
-sp-blockchain = "2.0.0-alpha.6"
-sp-api = "2.0.0-alpha.6"
-sc-client-api = "2.0.0-alpha.6"
-sp-core = "2.0.0-alpha.6"
-sp-finality-grandpa = "2.0.0-alpha.6"
+sc-client = "=0.8.0-alpha.6"
+sc-executor = "=0.8.0-alpha.6"
+sp-consensus = "=0.8.0-alpha.6"
+sp-blockchain = "=2.0.0-alpha.6"
+sp-externalities = "=0.8.0-alpha.6"
+sp-api = "=2.0.0-alpha.6"
+sp-state-machine = "=0.8.0-alpha.6"
+sp-version = "=2.0.0-alpha.6"
+sc-client-api = "=2.0.0-alpha.6"
+sp-core = "=2.0.0-alpha.6"
+sp-storage = "=2.0.0-alpha.6"
+sp-finality-grandpa = "=2.0.0-alpha.6"
+hex = "0.3.2"
+bytes = "0.4.12"
+sp-std = "=2.0.0-alpha.6"
+
+cosmwasm = "0.7.2"
+cw-storage = "0.2.0"
+
+schemars = "=0.5.0"
+serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 
 # Just to build on wasm
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
+panic = 'abort'
+incremental = false
+overflow-checks = true
+
+[features]
+default = ["cranelift"]
+# for quicker tests, cargo test --lib
+# for more explicit tests, cargo test --features=backtraces
+backtraces = ["cosmwasm/backtraces", "cosmwasm-vm/backtraces"]
+cranelift = ["cosmwasm-vm/default-cranelift"]
+singlepass = ["cosmwasm-vm/default-singlepass"]
+
 [dev-dependencies]
 rand = "0.7.3"
 ed25519-dalek = "1.0.0-pre.3"
-sp-keyring = "2.0.0-alpha.6"
 termcolor = "1.1.0"
+sp-keyring = "=2.0.0-alpha.6"
+cosmwasm-vm = { version = "0.7.2", default-features = false }

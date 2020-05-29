@@ -1,21 +1,23 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{H256, Header, BlockNumber};
+use crate::types::{H256, JsonHeader, BlockNumber};
 
-use cosmwasm::types::HumanAddr;
+//use cosmwasm::types::HumanAddr;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
     pub name: String,
-    pub header: Header,
+    pub height: u32,
+    pub header: JsonHeader
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum HandleMsg {
     UpdateClient {
-        header: Header,
+        height: u32,
+        header: JsonHeader,
     }
 }
 
