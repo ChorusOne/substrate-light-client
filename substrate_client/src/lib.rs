@@ -148,14 +148,18 @@ mod tests {
             Default::default(),
         );
 
-        let data = if custom_authority_set.is_none() {
-            initialize_db(initial_header.clone(), LightAuthoritySet::new(0, vec![])).unwrap()
+        let result = if custom_authority_set.is_none() {
+            initialize_db(initial_header.clone(), LightAuthoritySet::new(0, vec![]))
         } else {
-            initialize_db(initial_header.clone(), custom_authority_set.unwrap()).unwrap()
+            initialize_db(initial_header.clone(), custom_authority_set.unwrap())
         };
-        assert!(data.len() > 0);
+        assert!(result.is_ok());
+        let encoded_data = result.unwrap();
+        assert!(encoded_data.len() > 0);
+        // Best header need to be updated
+        assert_best_header(encoded_data.clone(), &initial_header);
 
-        (data, initial_header)
+        (encoded_data, initial_header)
     }
 
     fn create_next_header(header: Header) -> Header {
