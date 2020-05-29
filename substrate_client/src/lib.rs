@@ -165,14 +165,25 @@ mod tests {
         next_header
     }
 
+    fn assert_best_header(encoded_data: Vec<u8>, expected_to_be_best_header: &Header) {
+        let result = current_status::<Block>(encoded_data.clone());
+        assert!(result.is_ok());
+        let status = result.unwrap();
+        assert!(status.possible_best_header.is_some());
+        assert_eq!(
+            &status.possible_best_header.unwrap(),
+            expected_to_be_best_header
+        );
+    }
+
     fn assert_finalized_header(encoded_data: Vec<u8>, expected_to_be_finalized: &Header) {
         let result = current_status::<Block>(encoded_data.clone());
         assert!(result.is_ok());
         let status = result.unwrap();
         assert!(status.possible_finalized_header.is_some());
         assert_eq!(
-            status.possible_finalized_header.unwrap().hash(),
-            expected_to_be_finalized.hash()
+            &status.possible_finalized_header.unwrap(),
+            expected_to_be_finalized
         );
     }
 
@@ -220,8 +231,10 @@ mod tests {
     fn test_initialize_db_success() {
         let (encoded_data, initial_header) = init_test_db(None);
         let mut next_header = create_next_header(initial_header);
-
-        assert!(ingest_finalized_header(encoded_data, next_header, None, 256).is_ok());
+        let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None, 256);
+        assert!(result.is_ok());
+        let encoded_data = result.unwrap().1;
+        assert_best_header(encoded_data, &next_header);
     }
 
     #[test]
@@ -272,6 +285,8 @@ mod tests {
             .unwrap()
             .1;
 
+        // Best header should be updated
+        assert_best_header(encoded_data.clone(), &next_header);
         // We should now have next schedule change in database
         assert_next_change_in_authority(encoded_data.clone(), &change);
         // Current authority set remains same
@@ -301,6 +316,8 @@ mod tests {
         assert!(result.is_ok());
         // Updating encoded data
         let encoded_data = result.unwrap().1;
+        // Best header should be updated
+        assert_best_header(encoded_data.clone(), &next_header);
 
         // We can push another authority set as new authority set will be enacted.
         let mut next_header = create_next_header(next_header);
@@ -319,6 +336,8 @@ mod tests {
         assert!(result.is_ok());
         // Updating encoded data
         let encoded_data = result.unwrap().1;
+        // Best header should be updated
+        assert_best_header(encoded_data.clone(), &next_header);
 
         // Now, we have our authority set changed, and older NextChangeInAuthority struct replaced
         // by new change
@@ -345,6 +364,8 @@ mod tests {
         assert!(result.is_ok());
         // Updating encoded data
         let encoded_data = result.unwrap().1;
+        // Best header should be updated
+        assert_best_header(encoded_data.clone(), &next_header);
 
         // new change still same
         assert_next_change_in_authority(encoded_data.clone(), &new_change);
@@ -363,6 +384,8 @@ mod tests {
         assert!(result.is_ok());
         // Updating encoded data
         let encoded_data = result.unwrap().1;
+        // Best header should be updated
+        assert_best_header(encoded_data.clone(), &next_header);
 
         // Now NextChangeInAuthority should be removed from db and authority set is changed
         assert_no_next_change_in_authority(encoded_data.clone());
@@ -403,6 +426,8 @@ mod tests {
         assert!(result.is_ok());
         // Updated data with first header
         let encoded_data = result.unwrap().1;
+        // Best header should be updated
+        assert_best_header(encoded_data.clone(), &first_header);
 
         // Now we will try to ingest a block with justification
         let second_header = create_next_header(first_header.clone());
@@ -447,18 +472,25 @@ mod tests {
         assert!(result.is_ok());
 
         let encoded_data = result.unwrap().1;
+        // Best header should be updated
+        assert_best_header(encoded_data.clone(), &second_header);
+        // Finalized header should be updated
         assert_finalized_header(encoded_data.clone(), &second_header);
 
         let third_header = create_next_header(second_header.clone());
         let result = ingest_finalized_header(encoded_data.clone(), third_header.clone(), None, 256);
         assert!(result.is_ok());
         let encoded_data = result.unwrap().1;
+        // Best header should be updated
+        assert_best_header(encoded_data.clone(), &third_header);
 
         let fourth_header = create_next_header(third_header.clone());
         let result =
             ingest_finalized_header(encoded_data.clone(), fourth_header.clone(), None, 256);
         assert!(result.is_ok());
         let encoded_data = result.unwrap().1;
+        // Best header should be updated
+        assert_best_header(encoded_data.clone(), &fourth_header);
 
         let fifth_header = create_next_header(fourth_header.clone());
         // Another justification, finalizing third, fourth and fifth header
@@ -501,6 +533,8 @@ mod tests {
 
         // All blocks including fifth one should be finalized
         let encoded_data = result.unwrap().1;
+        // Best header should be updated
+        assert_best_header(encoded_data.clone(), &fifth_header);
         assert_finalized_header(encoded_data.clone(), &fifth_header);
     }
 }
