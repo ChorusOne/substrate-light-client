@@ -64,7 +64,9 @@ where
             .header(BlockId::<Block>::Hash(info.finalized_hash))?;
     }
     if info.best_hash != Default::default() {
-        possible_best_header = backend.blockchain().header(BlockId::<Block>::Hash(info.best_hash))?;
+        possible_best_header = backend
+            .blockchain()
+            .header(BlockId::<Block>::Hash(info.best_hash))?;
     }
     let possible_next_change_in_authority = fetch_next_authority_change(backend.clone())?;
 
@@ -72,7 +74,7 @@ where
         possible_finalized_header,
         possible_light_authority_set,
         possible_next_change_in_authority,
-        possible_best_header
+        possible_best_header,
     })
 }
 
@@ -136,10 +138,12 @@ mod tests {
     };
     use sp_keyring::Ed25519Keyring;
     use sp_runtime::traits::{Block as BlockT, HashFor, Header as HeaderT, NumberFor, One};
-    use sp_runtime::DigestItem;
+    use sp_runtime::{DigestItem, Justification};
     use std::hash::Hash;
 
-    fn init_test_db(custom_authority_set: Option<LightAuthoritySet>) -> (Vec<u8>, Header) {
+    fn assert_successful_db_init(
+        custom_authority_set: Option<LightAuthoritySet>,
+    ) -> (Vec<u8>, Header) {
         let initial_header = Header::new(
             One::one(),
             Default::default(),
@@ -148,14 +152,42 @@ mod tests {
             Default::default(),
         );
 
-        let data = if custom_authority_set.is_none() {
-            initialize_db(initial_header.clone(), LightAuthoritySet::new(0, vec![])).unwrap()
+        let result = if custom_authority_set.is_none() {
+            initialize_db(initial_header.clone(), LightAuthoritySet::new(0, vec![]))
         } else {
-            initialize_db(initial_header.clone(), custom_authority_set.unwrap()).unwrap()
+            initialize_db(initial_header.clone(), custom_authority_set.unwrap())
         };
-        assert!(data.len() > 0);
+        assert!(result.is_ok());
+        let encoded_data = result.unwrap();
+        assert!(encoded_data.len() > 0);
+        // Best header need to be updated
+        assert_best_header(encoded_data.clone(), &initial_header);
 
-        (data, initial_header)
+        (encoded_data, initial_header)
+    }
+
+    fn assert_successful_header_ingestion(
+        encoded_data: Vec<u8>,
+        header: Header,
+        justification: Option<Justification>,
+    ) -> Vec<u8> {
+        let result = ingest_finalized_header(encoded_data, header.clone(), justification, 256);
+        assert!(result.is_ok());
+        let encoded_data = result.unwrap().1;
+        // Best header need to be updated
+        assert_best_header(encoded_data.clone(), &header);
+        encoded_data
+    }
+
+    fn assert_failed_header_ingestion(
+        encoded_data: Vec<u8>,
+        header: Header,
+        justification: Option<Justification>,
+        expected_error: String,
+    ) {
+        let result = ingest_finalized_header(encoded_data, header.clone(), justification, 256);
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap(), expected_error);
     }
 
     fn create_next_header(header: Header) -> Header {
@@ -229,42 +261,42 @@ mod tests {
 
     #[test]
     fn test_initialize_db_success() {
-        let (encoded_data, initial_header) = init_test_db(None);
+        let (encoded_data, initial_header) = assert_successful_db_init(None);
         let mut next_header = create_next_header(initial_header);
-        let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None, 256);
-        assert!(result.is_ok());
-        let encoded_data = result.unwrap().1;
-        assert_best_header(encoded_data, &next_header);
+        assert_successful_header_ingestion(encoded_data, next_header, None);
     }
 
     #[test]
     fn test_initialize_db_non_sequential_block() {
-        let (encoded_data, initial_header) = init_test_db(None);
+        let (encoded_data, initial_header) = assert_successful_db_init(None);
 
         let mut next_header = create_next_header(initial_header);
         // Let's change number of block to be non sequential
         next_header.number += 1;
 
-        assert_eq!(ingest_finalized_header(encoded_data, next_header, None, 256), Err(String::from("Other(ClientImport(\"Import failed: Did not finalize blocks in sequential order.\"))")));
+        assert_failed_header_ingestion(encoded_data, next_header, None, String::from("Other(ClientImport(\"Import failed: Did not finalize blocks in sequential order.\"))"));
     }
 
     #[test]
     fn test_initialize_db_wrong_parent_hash() {
-        let (encoded_data, initial_header) = init_test_db(None);
+        let (encoded_data, initial_header) = assert_successful_db_init(None);
 
         let mut next_header = create_next_header(initial_header);
         // Setting wrong parent hash
         next_header.parent_hash = Default::default();
 
-        assert_eq!(
-            ingest_finalized_header(encoded_data, next_header, None, 256),
-            Err(String::from("UnknownParent"))
+        assert_failed_header_ingestion(
+            encoded_data,
+            next_header,
+            None,
+            String::from("UnknownParent"),
         );
     }
 
     #[test]
     fn test_authority_set_processing() {
-        let (encoded_data, initial_header) = init_test_db(None);
+        println!("Starting Authority set processing test");
+        let (encoded_data, initial_header) = assert_successful_db_init(None);
 
         let mut next_header = create_next_header(initial_header);
 
@@ -281,12 +313,9 @@ mod tests {
             sp_finality_grandpa::ConsensusLog::ScheduledChange(change.clone()).encode(),
         ));
         // Updating encoded data
-        let encoded_data = ingest_finalized_header(encoded_data, next_header.clone(), None, 256)
-            .unwrap()
-            .1;
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, next_header.clone(), None);
 
-        // Best header should be updated
-        assert_best_header(encoded_data.clone(), &next_header);
         // We should now have next schedule change in database
         assert_next_change_in_authority(encoded_data.clone(), &change);
         // Current authority set remains same
@@ -311,13 +340,10 @@ mod tests {
                 "VerificationFailed(None, \"Scheduled change already exists.\")"
             ))
         );
+        // After clearing digest we should be able to ingest header
         next_header.digest.clear();
-        let result = ingest_finalized_header(encoded_data, next_header.clone(), None, 256);
-        assert!(result.is_ok());
-        // Updating encoded data
-        let encoded_data = result.unwrap().1;
-        // Best header should be updated
-        assert_best_header(encoded_data.clone(), &next_header);
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, next_header.clone(), None);
 
         // We can push another authority set as new authority set will be enacted.
         let mut next_header = create_next_header(next_header);
@@ -332,12 +358,9 @@ mod tests {
             GRANDPA_ENGINE_ID,
             sp_finality_grandpa::ConsensusLog::ScheduledChange(new_change.clone()).encode(),
         ));
-        let result = ingest_finalized_header(encoded_data, next_header.clone(), None, 256);
-        assert!(result.is_ok());
-        // Updating encoded data
-        let encoded_data = result.unwrap().1;
-        // Best header should be updated
-        assert_best_header(encoded_data.clone(), &next_header);
+
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, next_header.clone(), None);
 
         // Now, we have our authority set changed, and older NextChangeInAuthority struct replaced
         // by new change
@@ -360,12 +383,8 @@ mod tests {
         let mut next_header = create_next_header(next_header.clone());
         // We don't need cloned digest
         next_header.digest.logs.clear();
-        let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None, 256);
-        assert!(result.is_ok());
-        // Updating encoded data
-        let encoded_data = result.unwrap().1;
-        // Best header should be updated
-        assert_best_header(encoded_data.clone(), &next_header);
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, next_header.clone(), None);
 
         // new change still same
         assert_next_change_in_authority(encoded_data.clone(), &new_change);
@@ -380,12 +399,8 @@ mod tests {
         );
 
         let mut next_header = create_next_header(next_header.clone());
-        let result = ingest_finalized_header(encoded_data.clone(), next_header.clone(), None, 256);
-        assert!(result.is_ok());
-        // Updating encoded data
-        let encoded_data = result.unwrap().1;
-        // Best header should be updated
-        assert_best_header(encoded_data.clone(), &next_header);
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, next_header.clone(), None);
 
         // Now NextChangeInAuthority should be removed from db and authority set is changed
         assert_no_next_change_in_authority(encoded_data.clone());
@@ -420,14 +435,11 @@ mod tests {
         let voters = make_ids(peers);
         let genesis_authority_set = LightAuthoritySet::new(0, voters);
 
-        let (encoded_data, initial_header) = init_test_db(Some(genesis_authority_set.clone()));
+        let (encoded_data, initial_header) =
+            assert_successful_db_init(Some(genesis_authority_set.clone()));
         let first_header = create_next_header(initial_header.clone());
-        let result = ingest_finalized_header(encoded_data, first_header.clone(), None, 256);
-        assert!(result.is_ok());
-        // Updated data with first header
-        let encoded_data = result.unwrap().1;
-        // Best header should be updated
-        assert_best_header(encoded_data.clone(), &first_header);
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, first_header.clone(), None);
 
         // Now we will try to ingest a block with justification
         let second_header = create_next_header(first_header.clone());
@@ -463,34 +475,19 @@ mod tests {
         let justification = Some(grandpa_justification.encode());
 
         // Let's ingest it.
-        let result = ingest_finalized_header(
-            encoded_data.clone(),
-            second_header.clone(),
-            justification,
-            256,
-        );
-        assert!(result.is_ok());
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, second_header.clone(), justification);
 
-        let encoded_data = result.unwrap().1;
-        // Best header should be updated
-        assert_best_header(encoded_data.clone(), &second_header);
         // Finalized header should be updated
         assert_finalized_header(encoded_data.clone(), &second_header);
 
         let third_header = create_next_header(second_header.clone());
-        let result = ingest_finalized_header(encoded_data.clone(), third_header.clone(), None, 256);
-        assert!(result.is_ok());
-        let encoded_data = result.unwrap().1;
-        // Best header should be updated
-        assert_best_header(encoded_data.clone(), &third_header);
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, third_header.clone(), None);
 
         let fourth_header = create_next_header(third_header.clone());
-        let result =
-            ingest_finalized_header(encoded_data.clone(), fourth_header.clone(), None, 256);
-        assert!(result.is_ok());
-        let encoded_data = result.unwrap().1;
-        // Best header should be updated
-        assert_best_header(encoded_data.clone(), &fourth_header);
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, fourth_header.clone(), None);
 
         let fifth_header = create_next_header(fourth_header.clone());
         // Another justification, finalizing third, fourth and fifth header
@@ -523,18 +520,8 @@ mod tests {
         };
 
         let justification = Some(grandpa_justification.encode());
-        let result = ingest_finalized_header(
-            encoded_data.clone(),
-            fifth_header.clone(),
-            justification,
-            256,
-        );
-        assert!(result.is_ok());
-
-        // All blocks including fifth one should be finalized
-        let encoded_data = result.unwrap().1;
-        // Best header should be updated
-        assert_best_header(encoded_data.clone(), &fifth_header);
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, fifth_header.clone(), justification);
         assert_finalized_header(encoded_data.clone(), &fifth_header);
     }
 }
