@@ -152,16 +152,31 @@ mod tests {
             Default::default(),
         );
 
-        let result = if custom_authority_set.is_none() {
-            initialize_db(initial_header.clone(), LightAuthoritySet::new(0, vec![]))
+        let authority_set = if custom_authority_set.is_some() {
+            custom_authority_set.unwrap()
         } else {
-            initialize_db(initial_header.clone(), custom_authority_set.unwrap())
+            LightAuthoritySet::new(0, vec![])
         };
+
+        println!("=============DB Initialization Success Assert=================");
+        println!(
+            "Initializing database with authority set: {:?} and header: {:?}",
+            authority_set,
+            initial_header.hash()
+        );
+
+        let result = initialize_db(initial_header.clone(), authority_set);
         assert!(result.is_ok());
         let encoded_data = result.unwrap();
         assert!(encoded_data.len() > 0);
         // Best header need to be updated
         assert_best_header(encoded_data.clone(), &initial_header);
+
+        println!(
+            "DB initialized and updated best header is: {:?}",
+            initial_header.hash()
+        );
+        println!("==============================================");
 
         (encoded_data, initial_header)
     }
@@ -171,11 +186,25 @@ mod tests {
         header: Header,
         justification: Option<Justification>,
     ) -> Vec<u8> {
+        println!("=================Header Ingestion Success Assert=================");
+        println!(
+            "Ingesting header: {:?} with justification: {:?}",
+            header.hash(),
+            justification
+        );
+
         let result = ingest_finalized_header(encoded_data, header.clone(), justification, 256);
         assert!(result.is_ok());
         let encoded_data = result.unwrap().1;
         // Best header need to be updated
         assert_best_header(encoded_data.clone(), &header);
+
+        println!(
+            "Header is ingested and updated best header is: {:?}",
+            header.hash()
+        );
+        println!("==============================================================");
+
         encoded_data
     }
 
@@ -185,9 +214,22 @@ mod tests {
         justification: Option<Justification>,
         expected_error: String,
     ) {
+        println!("=================Header Ingestion Failure Assert================");
+        println!(
+            "Ingesting header: {:?} with justification: {:?}",
+            header.hash(),
+            justification
+        );
+
         let result = ingest_finalized_header(encoded_data, header.clone(), justification, 256);
         assert!(result.is_err());
         assert_eq!(result.err().unwrap(), expected_error);
+
+        println!(
+            "Header ingestion is failed with error: {:?}",
+            expected_error
+        );
+        println!("==============================================================");
     }
 
     fn create_next_header(header: Header) -> Header {
@@ -198,31 +240,57 @@ mod tests {
     }
 
     fn assert_best_header(encoded_data: Vec<u8>, expected_to_be_best_header: &Header) {
+        println!("================Best Header Assert=====================");
+        println!(
+            "Checking if best header is updated to {:?}",
+            expected_to_be_best_header.hash()
+        );
+
         let result = current_status::<Block>(encoded_data.clone());
         assert!(result.is_ok());
         let status = result.unwrap();
         assert!(status.possible_best_header.is_some());
-        assert_eq!(
-            &status.possible_best_header.unwrap(),
-            expected_to_be_best_header
+        let current_best_header = status.possible_best_header.unwrap();
+        assert_eq!(&current_best_header, expected_to_be_best_header);
+
+        println!(
+            "Best header is updated to {:?} successfully.",
+            current_best_header.hash()
         );
+        println!("==============================================================");
     }
 
     fn assert_finalized_header(encoded_data: Vec<u8>, expected_to_be_finalized: &Header) {
+        println!("================Finalized Header Assert=====================");
+        println!(
+            "Checking if finalized header is updated to {:?}",
+            expected_to_be_finalized.hash()
+        );
+
         let result = current_status::<Block>(encoded_data.clone());
         assert!(result.is_ok());
         let status = result.unwrap();
         assert!(status.possible_finalized_header.is_some());
-        assert_eq!(
-            &status.possible_finalized_header.unwrap(),
-            expected_to_be_finalized
+        let current_finalized_header = status.possible_finalized_header.unwrap();
+        assert_eq!(&current_finalized_header, expected_to_be_finalized);
+
+        println!(
+            "Finalized header is updated to {:?}",
+            current_finalized_header.hash()
         );
+        println!("==============================================================");
     }
 
     fn assert_authority_set(
         encoded_data: Vec<u8>,
         expected_light_authority_set: &LightAuthoritySet,
     ) {
+        println!("================Authority set Assert=====================");
+        println!(
+            "Checking if light authority set is updated to {:?}",
+            expected_light_authority_set
+        );
+
         let result = current_status::<Block>(encoded_data.clone());
         assert!(result.is_ok());
         let status = result.unwrap();
@@ -236,27 +304,45 @@ mod tests {
             light_authority_set.authorities(),
             expected_light_authority_set.authorities()
         );
+
+        println!(
+            "Light authority set is updated to {:?}",
+            light_authority_set
+        );
+        println!("==============================================================");
     }
 
     fn assert_next_change_in_authority(
         encoded_data: Vec<u8>,
-        scheduled_change: &ScheduledChange<NumberFor<Block>>,
+        expected_scheduled_change: &ScheduledChange<NumberFor<Block>>,
     ) {
+        println!("================Scheduled change Assert=====================");
+        println!(
+            "Checking if scheduled change is updated to {:?}",
+            expected_scheduled_change
+        );
+
         let result = current_status::<Block>(encoded_data.clone());
         assert!(result.is_ok());
         let status = result.unwrap();
         assert!(status.possible_next_change_in_authority.is_some());
-        assert_eq!(
-            &status.possible_next_change_in_authority.unwrap().change,
-            scheduled_change
-        );
+        let scheduled_change = status.possible_next_change_in_authority.unwrap().change;
+        assert_eq!(&scheduled_change, expected_scheduled_change);
+
+        println!("Scheduled change is updated to {:?}", scheduled_change);
+        println!("==============================================================");
     }
 
     fn assert_no_next_change_in_authority(encoded_data: Vec<u8>) {
+        println!("================No Scheduled change Assert=====================");
+
         let result = current_status::<Block>(encoded_data.clone());
         assert!(result.is_ok());
         let status = result.unwrap();
         assert!(status.possible_next_change_in_authority.is_none());
+
+        println!("Verified that scheduled change does not exists");
+        println!("==============================================================");
     }
 
     #[test]
@@ -300,6 +386,7 @@ mod tests {
 
         let mut next_header = create_next_header(initial_header);
 
+        println!("\n\nPushing scheduled change with next header and verifying data.");
         // Let's push scheduled change
         let change = ScheduledChange {
             next_authorities: vec![
@@ -316,11 +403,13 @@ mod tests {
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, next_header.clone(), None);
 
+        println!("\n\nWe should now have next scheduled change in database");
         // We should now have next schedule change in database
         assert_next_change_in_authority(encoded_data.clone(), &change);
         // Current authority set remains same
         assert_authority_set(encoded_data.clone(), &LightAuthoritySet::new(0, vec![]));
 
+        println!("\n\nWe cannot push another authority set while previous one exists");
         // We cannot push another authority set while previous one exists
         let mut next_header = create_next_header(next_header);
         next_header.digest_mut().push(DigestItem::Consensus(
@@ -334,17 +423,19 @@ mod tests {
             })
             .encode(),
         ));
-        assert_eq!(
-            ingest_finalized_header(encoded_data.clone(), next_header.clone(), None, 256),
-            Err(String::from(
-                "VerificationFailed(None, \"Scheduled change already exists.\")"
-            ))
+        assert_failed_header_ingestion(
+            encoded_data.clone(),
+            next_header.clone(),
+            None,
+            String::from("VerificationFailed(None, \"Scheduled change already exists.\")"),
         );
         // After clearing digest we should be able to ingest header
+        println!("\n\nAfter clearing header's digest, we were able to ingest it");
         next_header.digest.clear();
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, next_header.clone(), None);
 
+        println!("\n\nWe can push another authority set as new authority set will be enacted.");
         // We can push another authority set as new authority set will be enacted.
         let mut next_header = create_next_header(next_header);
         let new_change = ScheduledChange {
@@ -361,6 +452,8 @@ mod tests {
 
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, next_header.clone(), None);
+
+        println!("\n\nNow, we have our authority set changed, and older NextChangeInAuthority struct replaced by new change.");
 
         // Now, we have our authority set changed, and older NextChangeInAuthority struct replaced
         // by new change
@@ -379,6 +472,8 @@ mod tests {
 
         // Now, a scenario where scheduled change isn't part of digest after two blocks delay
         // In this case new authority set will be enacted and aux entry will be removed
+
+        println!("\n\nNow, a scenario where scheduled change isn't part of digest after two blocks delay. In this case new authority set will be enacted and aux entry will be removed");
 
         let mut next_header = create_next_header(next_header.clone());
         // We don't need cloned digest
@@ -401,6 +496,10 @@ mod tests {
         let mut next_header = create_next_header(next_header.clone());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, next_header.clone(), None);
+
+        println!(
+            "\n\nNow NextChangeInAuthority should be removed from db and authority set is changed"
+        );
 
         // Now NextChangeInAuthority should be removed from db and authority set is changed
         assert_no_next_change_in_authority(encoded_data.clone());
@@ -431,10 +530,13 @@ mod tests {
 
     #[test]
     fn test_finalization() {
+        println!("Starting finalization test");
         let peers = &[Ed25519Keyring::Alice];
         let voters = make_ids(peers);
+        println!("Creating initial authority set with one voter");
         let genesis_authority_set = LightAuthoritySet::new(0, voters);
 
+        println!("\n\nInitializing database");
         let (encoded_data, initial_header) =
             assert_successful_db_init(Some(genesis_authority_set.clone()));
         let first_header = create_next_header(initial_header.clone());
@@ -474,6 +576,12 @@ mod tests {
 
         let justification = Some(grandpa_justification.encode());
 
+        println!(
+            "\n\nCreated justification for initial, first and second header: {:?}",
+            justification
+        );
+        println!("Now we will try to ingest second header with justification");
+
         // Let's ingest it.
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, second_header.clone(), justification);
@@ -481,6 +589,7 @@ mod tests {
         // Finalized header should be updated
         assert_finalized_header(encoded_data.clone(), &second_header);
 
+        println!("\n\nNow, ingesting third and fourth header");
         let third_header = create_next_header(second_header.clone());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, third_header.clone(), None);
@@ -520,8 +629,14 @@ mod tests {
         };
 
         let justification = Some(grandpa_justification.encode());
+        println!(
+            "\n\nCreated justification for third, fourth and fifth header: {:?}",
+            justification
+        );
+        println!("Now we will try to ingest fifth header with justification");
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, fifth_header.clone(), justification);
+        println!("\n\nlast finalized header should be updated to fifth header");
         assert_finalized_header(encoded_data.clone(), &fifth_header);
     }
 }
