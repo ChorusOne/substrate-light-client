@@ -3,8 +3,9 @@ mod block_processor;
 mod client;
 mod common;
 mod db;
-mod dummy_objs;
 mod genesis;
+mod grandpa_block_import;
+mod justification;
 mod runtime;
 mod storage;
 mod types;
@@ -121,21 +122,22 @@ mod tests {
         fetch_light_authority_set, fetch_next_authority_change, initialize_backend,
         LightAuthoritySet, NextChangeInAuthority,
     };
+    use crate::justification::{Commit, GrandpaJustification, Message, Precommit};
     use crate::storage::Storage;
     use crate::types::{Block, Header};
     use crate::{current_status, ingest_finalized_header, initialize_db};
     use clear_on_drop::clear::Clear;
-    use finality_grandpa::{Commit, SignedPrecommit};
+    use finality_grandpa::SignedPrecommit;
     use parity_scale_codec::alloc::sync::Arc;
     use parity_scale_codec::{Decode, Encode};
     use sc_client_api::Storage as StorageT;
-    use sc_finality_grandpa::{AuthorityId, Message, Precommit};
     use sp_blockchain::Backend;
     use sp_core::crypto::Public;
-    use sp_core::ed25519;
+    use sp_core::{ed25519, H256};
     use sp_finality_grandpa::{
-        AuthorityList, AuthoritySignature, ScheduledChange, GRANDPA_ENGINE_ID,
+        AuthorityId, AuthorityList, AuthoritySignature, ScheduledChange, GRANDPA_ENGINE_ID,
     };
+    use sp_keyring::ed25519::Keyring;
     use sp_keyring::Ed25519Keyring;
     use sp_runtime::traits::{Block as BlockT, HashFor, Header as HeaderT, NumberFor, One};
     use sp_runtime::{DigestItem, Justification};
@@ -724,18 +726,44 @@ mod tests {
         );
     }
 
-    #[derive(Encode, Decode)]
-    pub struct GrandpaJustification<Block: BlockT> {
-        round: u64,
-        commit: Commit<Block::Hash, NumberFor<Block>, AuthoritySignature, AuthorityId>,
-        votes_ancestries: Vec<Block::Header>,
-    }
-
     fn make_ids(keys: &[Ed25519Keyring]) -> AuthorityList {
         keys.iter()
             .map(|key| key.clone().public().into())
             .map(|id| (id, 1))
             .collect()
+    }
+
+    fn create_justification_commit(
+        round: u64,
+        set_id: u64,
+        header_ancestry: Vec<Header>,
+        last_header: Header,
+        peers: &[Keyring],
+    ) -> Commit<Block> {
+        let mut precommits: Vec<SignedPrecommit<H256, u32, AuthoritySignature, AuthorityId>> =
+            vec![];
+        for header in header_ancestry {
+            let precommit = Precommit::<Block> {
+                target_hash: header.hash().clone(),
+                target_number: *header.number(),
+            };
+            let msg = Message::<Block>::Precommit(precommit.clone());
+            let mut encoded_msg: Vec<u8> = Vec::new();
+            encoded_msg.clear();
+            (&msg, round, set_id).encode_to(&mut encoded_msg);
+            let signature = peers[0].sign(&encoded_msg[..]).into();
+            precommits.push(SignedPrecommit {
+                precommit,
+                signature,
+                id: peers[0].public().into(),
+            });
+        }
+
+        Commit::<Block> {
+            target_hash: last_header.hash().clone(),
+            target_number: *last_header.number(),
+            precommits,
+        }
     }
 
     #[test]
@@ -772,7 +800,7 @@ mod tests {
             signature,
             id: peers[0].public().into(),
         };
-        let commit = Commit {
+        let commit = Commit::<Block> {
             target_hash: second_header.parent_hash().clone(),
             target_number: *second_header.number(),
             precommits: vec![precommit],
@@ -832,7 +860,7 @@ mod tests {
             signature,
             id: peers[0].public().into(),
         };
-        let commit = Commit {
+        let commit = Commit::<Block> {
             target_hash: fifth_header.parent_hash().clone(),
             target_number: *fifth_header.number(),
             precommits: vec![precommit],
