@@ -737,9 +737,10 @@ mod tests {
         round: u64,
         set_id: u64,
         header_ancestry: Vec<Header>,
-        last_header: Header,
         peers: &[Keyring],
     ) -> Commit<Block> {
+        assert!(header_ancestry.len() > 0);
+        let first_header = header_ancestry.first().unwrap().clone();
         let mut precommits: Vec<SignedPrecommit<H256, u32, AuthoritySignature, AuthorityId>> =
             vec![];
         for header in header_ancestry {
@@ -760,8 +761,8 @@ mod tests {
         }
 
         Commit::<Block> {
-            target_hash: last_header.hash().clone(),
-            target_number: *last_header.number(),
+            target_hash: first_header.hash().clone(),
+            target_number: *first_header.number(),
             precommits,
         }
     }
@@ -784,32 +785,18 @@ mod tests {
         // Now we will try to ingest a block with justification
         let second_header = create_next_header(first_header.clone());
 
-        let round: u64 = 1;
-        let set_id: u64 = 0;
-        let precommit = Precommit::<Block> {
-            target_hash: second_header.hash().clone(),
-            target_number: *second_header.number(),
-        };
-        let msg = Message::<Block>::Precommit(precommit.clone());
-        let mut encoded_msg: Vec<u8> = Vec::new();
-        encoded_msg.clear();
-        (&msg, round, set_id).encode_to(&mut encoded_msg);
-        let signature = peers[0].sign(&encoded_msg[..]).into();
-        let precommit = SignedPrecommit {
-            precommit,
-            signature,
-            id: peers[0].public().into(),
-        };
-        let commit = Commit::<Block> {
-            target_hash: second_header.parent_hash().clone(),
-            target_number: *second_header.number(),
-            precommits: vec![precommit],
-        };
+        let header_ancestry = vec![
+            initial_header.clone(),
+            first_header.clone(),
+            second_header.clone(),
+        ];
+
+        let commit = create_justification_commit(1, 0, header_ancestry.clone(), peers);
 
         let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
-            round,
+            round: 1,
             commit,
-            votes_ancestries: vec![second_header.clone()], // first_header.clone(), initial_header.clone()
+            votes_ancestries: header_ancestry[1..].to_vec(), // first_header.clone(), initial_header.clone()
         };
 
         let justification = Some(grandpa_justification.encode());

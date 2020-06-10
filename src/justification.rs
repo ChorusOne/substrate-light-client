@@ -64,9 +64,17 @@ pub type Message<Block> = finality_grandpa::Message<<Block as BlockT>::Hash, Num
 pub type Precommit<Block> = finality_grandpa::Precommit<<Block as BlockT>::Hash, NumberFor<Block>>;
 
 /// Justification used to prove block finality.
-pub trait ProvableJustification<Header: HeaderT>: Encode + Decode {
+pub trait ProvableJustification<Block: BlockT>: Encode + Decode {
     /// Verify justification with respect to authorities set and authorities set id.
     fn verify(&self, set_id: u64, authorities: &[(AuthorityId, u64)]) -> ClientResult<()>;
+
+    /// Verify justification as well as check if it is targeting correct block
+    fn verify_finalization(
+        &self,
+        set_id: u64,
+        finalized_target: (Block::Hash, NumberFor<Block>),
+        authorities: &[(AuthorityId, u64)],
+    ) -> ClientResult<()>;
 
     /// Decode and verify justification.
     fn decode_and_verify(
@@ -78,6 +86,17 @@ pub trait ProvableJustification<Header: HeaderT>: Encode + Decode {
             Self::decode(&mut &**justification).map_err(|_| ClientError::JustificationDecode)?;
         justification.verify(set_id, authorities)?;
         Ok(justification)
+    }
+
+    fn decode_and_verify_finalization(
+        justification: &Justification,
+        set_id: u64,
+        finalized_target: (Block::Hash, NumberFor<Block>),
+        authorities: &[(AuthorityId, u64)],
+    ) -> ClientResult<()> {
+        let justification =
+            Self::decode(&mut &**justification).map_err(|_| ClientError::JustificationDecode)?;
+        justification.verify_finalization(set_id, finalized_target, authorities)
     }
 }
 
@@ -200,29 +219,22 @@ impl<Block: BlockT> GrandpaJustification<Block> {
         })
     }
 
-    /// Decode a GRANDPA justification and validate the commit and the votes'
+    /// Validate the commit and the votes'
     /// ancestry proofs finalize the given block.
-    pub fn decode_and_verify_finalizes(
-        encoded: &[u8],
-        finalized_target: (Block::Hash, NumberFor<Block>),
+    pub fn verify_finalization(
+        &self,
         set_id: u64,
+        finalized_target: (Block::Hash, NumberFor<Block>),
         voters: &VoterSet<AuthorityId>,
-    ) -> Result<GrandpaJustification<Block>, ClientError>
+    ) -> Result<(), ClientError>
     where
         NumberFor<Block>: finality_grandpa::BlockNumberOps,
     {
-        let justification = GrandpaJustification::<Block>::decode(&mut &*encoded)
-            .map_err(|_| ClientError::JustificationDecode)?;
-
-        if (
-            justification.commit.target_hash,
-            justification.commit.target_number,
-        ) != finalized_target
-        {
+        if (self.commit.target_hash, self.commit.target_number) != finalized_target {
             let msg = "invalid commit target in grandpa justification".to_string();
             Err(ClientError::BadJustification(msg))
         } else {
-            justification.verify(set_id, voters).map(|_| justification)
+            self.verify(set_id, voters)
         }
     }
 
@@ -299,13 +311,24 @@ impl<Block: BlockT> GrandpaJustification<Block> {
     }
 }
 
-impl<Block: BlockT> ProvableJustification<Block::Header> for GrandpaJustification<Block>
+impl<Block: BlockT> ProvableJustification<Block> for GrandpaJustification<Block>
 where
     NumberFor<Block>: BlockNumberOps,
 {
     fn verify(&self, set_id: u64, authorities: &[(AuthorityId, u64)]) -> ClientResult<()> {
         let voter_set = VoterSet::new(authorities.clone().to_owned().drain(..)).unwrap();
         GrandpaJustification::verify(self, set_id, &voter_set)
+    }
+
+    fn verify_finalization(
+        &self,
+        set_id: u64,
+        finalized_target: (Block::Hash, NumberFor<Block>),
+        authorities: &[(AuthorityId, u64)],
+    ) -> ClientResult<()> {
+        let voter_set = VoterSet::new(authorities.clone().to_owned().drain(..)).unwrap();
+        GrandpaJustification::verify_finalization(self, set_id, finalized_target, &voter_set)?;
+        Ok(())
     }
 }
 

@@ -96,7 +96,7 @@ where
     B: Backend<Block> + 'static,
     NumberFor<Block>: finality_grandpa::BlockNumberOps,
     DigestFor<Block>: Encode,
-    J: ProvableJustification<Block::Header>,
+    J: ProvableJustification<Block>,
 {
     let hash = block.post_hash();
     let number = block.header.number().clone();
@@ -131,18 +131,8 @@ where
     C: HeaderBackend<Block> + Finalizer<Block, B> + Clone,
     B: Backend<Block> + 'static,
     NumberFor<Block>: finality_grandpa::BlockNumberOps,
-    J: ProvableJustification<Block::Header>,
+    J: ProvableJustification<Block>,
 {
-    // with justification, we have two cases
-    //
-    // optimistic: the same GRANDPA authorities set has generated intermediate justification
-    // => justification is verified using current authorities set + we could proceed further
-    //
-    // pessimistic scenario: the GRANDPA authorities set has changed
-    // => we need to fetch new authorities set (i.e. finality proof) from remote node
-
-    // first, try to behave optimistically
-
     let possible_light_authority_set = crate::common::fetch_light_authority_set(backend)
         .map_err(|e| ConsensusError::Other(Box::new(e)))?;
     if possible_light_authority_set.is_none() {
@@ -150,10 +140,11 @@ where
     }
     let light_authority_set = possible_light_authority_set.unwrap();
 
-    let authority_set_id = light_authority_set.set_id();
-    let justification = J::decode_and_verify(
+    // Verify if justification is valid and it finalizes correct block
+    let justification = J::decode_and_verify_finalization(
         &justification,
-        authority_set_id,
+        light_authority_set.set_id(),
+        (hash, number),
         &light_authority_set.authorities(),
     );
 
