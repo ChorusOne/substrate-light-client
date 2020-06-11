@@ -3,8 +3,9 @@ mod block_processor;
 mod client;
 mod common;
 mod db;
-mod dummy_objs;
 mod genesis;
+mod grandpa_block_import;
+mod justification;
 mod runtime;
 mod storage;
 mod types;
@@ -121,21 +122,22 @@ mod tests {
         fetch_light_authority_set, fetch_next_authority_change, initialize_backend,
         LightAuthoritySet, NextChangeInAuthority,
     };
+    use crate::justification::{Commit, GrandpaJustification, Message, Precommit};
     use crate::storage::Storage;
     use crate::types::{Block, Header};
     use crate::{current_status, ingest_finalized_header, initialize_db};
     use clear_on_drop::clear::Clear;
-    use finality_grandpa::{Commit, SignedPrecommit};
+    use finality_grandpa::SignedPrecommit;
     use parity_scale_codec::alloc::sync::Arc;
     use parity_scale_codec::{Decode, Encode};
     use sc_client_api::Storage as StorageT;
-    use sc_finality_grandpa::{AuthorityId, Message, Precommit};
     use sp_blockchain::Backend;
     use sp_core::crypto::Public;
-    use sp_core::ed25519;
+    use sp_core::{ed25519, H256};
     use sp_finality_grandpa::{
-        AuthorityList, AuthoritySignature, ScheduledChange, GRANDPA_ENGINE_ID,
+        AuthorityId, AuthorityList, AuthoritySignature, ScheduledChange, GRANDPA_ENGINE_ID,
     };
+    use sp_keyring::ed25519::Keyring;
     use sp_keyring::Ed25519Keyring;
     use sp_runtime::traits::{Block as BlockT, HashFor, Header as HeaderT, NumberFor, One};
     use sp_runtime::{DigestItem, Justification};
@@ -543,7 +545,7 @@ mod tests {
     #[test]
     fn test_initialize_db_success() {
         let (encoded_data, initial_header) = assert_successful_db_init(None, 1);
-        let mut next_header = create_next_header(initial_header);
+        let next_header = create_next_header(initial_header);
         assert_successful_header_ingestion(encoded_data, next_header, None, 1);
     }
 
@@ -702,7 +704,7 @@ mod tests {
             1,
         );
 
-        let mut next_header = create_next_header(next_header.clone());
+        let next_header = create_next_header(next_header.clone());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, next_header.clone(), None, 1);
 
@@ -724,18 +726,45 @@ mod tests {
         );
     }
 
-    #[derive(Encode, Decode)]
-    pub struct GrandpaJustification<Block: BlockT> {
-        round: u64,
-        commit: Commit<Block::Hash, NumberFor<Block>, AuthoritySignature, AuthorityId>,
-        votes_ancestries: Vec<Block::Header>,
-    }
-
     fn make_ids(keys: &[Ed25519Keyring]) -> AuthorityList {
         keys.iter()
             .map(|key| key.clone().public().into())
             .map(|id| (id, 1))
             .collect()
+    }
+
+    fn create_justification_commit(
+        round: u64,
+        set_id: u64,
+        header_ancestry: Vec<Header>,
+        peers: &[Keyring],
+    ) -> Commit<Block> {
+        assert!(header_ancestry.len() > 0);
+        let first_header = header_ancestry.first().unwrap().clone();
+        let mut precommits: Vec<SignedPrecommit<H256, u32, AuthoritySignature, AuthorityId>> =
+            vec![];
+        for header in header_ancestry {
+            let precommit = Precommit::<Block> {
+                target_hash: header.hash().clone(),
+                target_number: *header.number(),
+            };
+            let msg = Message::<Block>::Precommit(precommit.clone());
+            let mut encoded_msg: Vec<u8> = Vec::new();
+            encoded_msg.clear();
+            (&msg, round, set_id).encode_to(&mut encoded_msg);
+            let signature = peers[0].sign(&encoded_msg[..]).into();
+            precommits.push(SignedPrecommit {
+                precommit,
+                signature,
+                id: peers[0].public().into(),
+            });
+        }
+
+        Commit::<Block> {
+            target_hash: first_header.hash().clone(),
+            target_number: *first_header.number(),
+            precommits,
+        }
     }
 
     #[test]
@@ -756,39 +785,31 @@ mod tests {
         // Now we will try to ingest a block with justification
         let second_header = create_next_header(first_header.clone());
 
-        let round: u64 = 1;
-        let set_id: u64 = 0;
-        let precommit = Precommit::<Block> {
-            target_hash: second_header.hash().clone(),
-            target_number: *second_header.number(),
-        };
-        let msg = Message::<Block>::Precommit(precommit.clone());
-        let mut encoded_msg: Vec<u8> = Vec::new();
-        encoded_msg.clear();
-        (&msg, round, set_id).encode_to(&mut encoded_msg);
-        let signature = peers[0].sign(&encoded_msg[..]).into();
-        let precommit = SignedPrecommit {
-            precommit,
-            signature,
-            id: peers[0].public().into(),
-        };
-        let commit = Commit {
-            target_hash: second_header.parent_hash().clone(),
-            target_number: *second_header.number(),
-            precommits: vec![precommit],
-        };
+        let third_header = create_next_header(second_header.clone());
+
+        let fourth_header = create_next_header(third_header.clone());
+
+        let fifth_header = create_next_header(fourth_header.clone());
+
+        let sixth_header = create_next_header(fifth_header.clone());
+
+        let header_ancestry = vec![
+            second_header.clone(),
+            third_header.clone(),
+            fourth_header.clone(),
+        ];
+
+        let commit = create_justification_commit(1, 0, header_ancestry.clone(), peers);
 
         let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
-            round,
+            round: 1,
             commit,
-            votes_ancestries: vec![second_header.clone()], // first_header.clone(), initial_header.clone()
+            votes_ancestries: header_ancestry[1..].to_vec(), // first_header.clone(), initial_header.clone()
         };
 
         let justification = Some(grandpa_justification.encode());
 
-        write_test_flow(format!(
-            "\n\nCreated justification for initial, first and second header"
-        ));
+        write_test_flow(format!("\n\nCreated justification for Second header"));
         write_test_flow(format!(
             "Now we will try to ingest second header with justification"
         ));
@@ -803,51 +824,29 @@ mod tests {
 
         // Finalized header should be updated
         assert_finalized_header(encoded_data.clone(), &second_header, 1);
+        write_test_flow(format!("Initial, first and second header is finalized"));
 
         write_test_flow(format!("\n\nIngesting third header without justification"));
-        let third_header = create_next_header(second_header.clone());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, third_header.clone(), None, 1);
 
         write_test_flow(format!("\n\nIngesting fourth header without justification"));
-        let fourth_header = create_next_header(third_header.clone());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, fourth_header.clone(), None, 1);
 
-        let fifth_header = create_next_header(fourth_header.clone());
         // Another justification, finalizing third, fourth and fifth header
-        let round: u64 = 1;
-        let set_id: u64 = 0;
-        let precommit = Precommit::<Block> {
-            target_hash: fifth_header.hash().clone(),
-            target_number: *fifth_header.number(),
-        };
-        let msg = Message::<Block>::Precommit(precommit.clone());
-        let mut encoded_msg: Vec<u8> = Vec::new();
-        encoded_msg.clear();
-        (&msg, round, set_id).encode_to(&mut encoded_msg);
-        let signature = peers[0].sign(&encoded_msg[..]).into();
-        let precommit = SignedPrecommit {
-            precommit,
-            signature,
-            id: peers[0].public().into(),
-        };
-        let commit = Commit {
-            target_hash: fifth_header.parent_hash().clone(),
-            target_number: *fifth_header.number(),
-            precommits: vec![precommit],
-        };
+        let header_ancestry = vec![fifth_header.clone(), sixth_header.clone()];
+
+        let commit = create_justification_commit(1, 0, header_ancestry.clone(), peers);
 
         let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
-            round,
+            round: 1,
             commit,
-            votes_ancestries: vec![fifth_header.clone()], // first_header.clone(), initial_header.clone()
+            votes_ancestries: header_ancestry[1..].to_vec(), // first_header.clone(), initial_header.clone()
         };
 
         let justification = Some(grandpa_justification.encode());
-        write_test_flow(format!(
-            "\n\nCreated justification for third, fourth and fifth header"
-        ));
+        write_test_flow(format!("\n\nCreated justification for fifth header"));
         write_test_flow(format!(
             "Now we will try to ingest fifth header with justification"
         ));
@@ -857,9 +856,8 @@ mod tests {
             justification,
             1,
         );
-        write_test_flow(format!(
-            "\n\nlast finalized header should be updated to fifth header"
-        ));
+        write_test_flow(format!("\n\n"));
         assert_finalized_header(encoded_data.clone(), &fifth_header, 1);
+        write_test_flow(format!("third, fourth and fifth headers are now finalized"));
     }
 }
