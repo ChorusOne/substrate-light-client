@@ -29,10 +29,8 @@ sp-finality-grandpa = "=2.0.0-alpha.6"
 hex = "0.3.2"
 bytes = "0.4.12"
 sp-std = "=2.0.0-alpha.6"
-
 cosmwasm = "0.7.2"
 cw-storage = "0.2.0"
-
 schemars = "=0.5.0"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 
@@ -67,3 +65,4 @@ ed25519-dalek = "1.0.0-pre.3"
 termcolor = "1.1.0"
 sp-keyring = "=2.0.0-alpha.6"
 cosmwasm-vm = { version = "0.7.2", default-features = false }
+
