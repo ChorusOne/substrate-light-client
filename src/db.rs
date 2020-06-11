@@ -251,7 +251,7 @@ mod tests {
         transaction.put(1, b"key3", b"cat");
         assert!(db.write(transaction).is_ok());
 
-        let mut data = Data {
+        let data = Data {
             db,
             genesis_data: GenesisData {},
         };
@@ -272,7 +272,7 @@ mod tests {
         // and if we insert same data on both instance, then
         // both instance should produce same binary blob
         let encoded_data = data.encode();
-        let mut decoded_data = Data::decode(&mut encoded_data.as_slice()).unwrap();
+        let decoded_data = Data::decode(&mut encoded_data.as_slice()).unwrap();
 
         let mut transaction = data.db.transaction();
         transaction.put(0, b"another_format", b"pikachu");

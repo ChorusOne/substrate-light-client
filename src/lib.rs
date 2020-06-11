@@ -545,7 +545,7 @@ mod tests {
     #[test]
     fn test_initialize_db_success() {
         let (encoded_data, initial_header) = assert_successful_db_init(None, 1);
-        let mut next_header = create_next_header(initial_header);
+        let next_header = create_next_header(initial_header);
         assert_successful_header_ingestion(encoded_data, next_header, None, 1);
     }
 
@@ -704,7 +704,7 @@ mod tests {
             1,
         );
 
-        let mut next_header = create_next_header(next_header.clone());
+        let next_header = create_next_header(next_header.clone());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, next_header.clone(), None, 1);
 

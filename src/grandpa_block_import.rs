@@ -84,7 +84,7 @@ where
 /// Try to import new block.
 fn do_import_block<B, C, Block: BlockT, J>(
     mut client: C,
-    mut backend: Arc<B>,
+    backend: Arc<B>,
     mut block: BlockImportParams<Block, TransactionFor<B, Block>>,
     new_cache: HashMap<well_known_cache_keys::Id, Vec<u8>>,
 ) -> Result<ImportResult, ConsensusError>
@@ -105,7 +105,7 @@ where
     let justification = block.justification.take();
     let import_result = client.import_block(block, new_cache);
 
-    let mut imported_aux = match import_result {
+    let imported_aux = match import_result {
         Ok(ImportResult::Imported(aux)) => aux,
         Ok(r) => return Ok(r),
         Err(e) => return Err(ConsensusError::ClientImport(e.to_string()).into()),
