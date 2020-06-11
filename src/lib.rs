@@ -785,10 +785,18 @@ mod tests {
         // Now we will try to ingest a block with justification
         let second_header = create_next_header(first_header.clone());
 
+        let third_header = create_next_header(second_header.clone());
+
+        let fourth_header = create_next_header(third_header.clone());
+
+        let fifth_header = create_next_header(fourth_header.clone());
+
+        let sixth_header = create_next_header(fifth_header.clone());
+
         let header_ancestry = vec![
-            initial_header.clone(),
-            first_header.clone(),
             second_header.clone(),
+            third_header.clone(),
+            fourth_header.clone(),
         ];
 
         let commit = create_justification_commit(1, 0, header_ancestry.clone(), peers);
@@ -801,9 +809,7 @@ mod tests {
 
         let justification = Some(grandpa_justification.encode());
 
-        write_test_flow(format!(
-            "\n\nCreated justification for initial, first and second header"
-        ));
+        write_test_flow(format!("\n\nCreated justification for Second header"));
         write_test_flow(format!(
             "Now we will try to ingest second header with justification"
         ));
@@ -818,51 +824,29 @@ mod tests {
 
         // Finalized header should be updated
         assert_finalized_header(encoded_data.clone(), &second_header, 1);
+        write_test_flow(format!("Initial, first and second header is finalized"));
 
         write_test_flow(format!("\n\nIngesting third header without justification"));
-        let third_header = create_next_header(second_header.clone());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, third_header.clone(), None, 1);
 
         write_test_flow(format!("\n\nIngesting fourth header without justification"));
-        let fourth_header = create_next_header(third_header.clone());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, fourth_header.clone(), None, 1);
 
-        let fifth_header = create_next_header(fourth_header.clone());
         // Another justification, finalizing third, fourth and fifth header
-        let round: u64 = 1;
-        let set_id: u64 = 0;
-        let precommit = Precommit::<Block> {
-            target_hash: fifth_header.hash().clone(),
-            target_number: *fifth_header.number(),
-        };
-        let msg = Message::<Block>::Precommit(precommit.clone());
-        let mut encoded_msg: Vec<u8> = Vec::new();
-        encoded_msg.clear();
-        (&msg, round, set_id).encode_to(&mut encoded_msg);
-        let signature = peers[0].sign(&encoded_msg[..]).into();
-        let precommit = SignedPrecommit {
-            precommit,
-            signature,
-            id: peers[0].public().into(),
-        };
-        let commit = Commit::<Block> {
-            target_hash: fifth_header.parent_hash().clone(),
-            target_number: *fifth_header.number(),
-            precommits: vec![precommit],
-        };
+        let header_ancestry = vec![fifth_header.clone(), sixth_header.clone()];
+
+        let commit = create_justification_commit(1, 0, header_ancestry.clone(), peers);
 
         let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
-            round,
+            round: 1,
             commit,
-            votes_ancestries: vec![fifth_header.clone()], // first_header.clone(), initial_header.clone()
+            votes_ancestries: header_ancestry[1..].to_vec(), // first_header.clone(), initial_header.clone()
         };
 
         let justification = Some(grandpa_justification.encode());
-        write_test_flow(format!(
-            "\n\nCreated justification for third, fourth and fifth header"
-        ));
+        write_test_flow(format!("\n\nCreated justification for fifth header"));
         write_test_flow(format!(
             "Now we will try to ingest fifth header with justification"
         ));
@@ -872,9 +856,8 @@ mod tests {
             justification,
             1,
         );
-        write_test_flow(format!(
-            "\n\nlast finalized header should be updated to fifth header"
-        ));
+        write_test_flow(format!("\n\n"));
         assert_finalized_header(encoded_data.clone(), &fifth_header, 1);
+        write_test_flow(format!("third, fourth and fifth headers are now finalized"));
     }
 }
