@@ -1,7 +1,7 @@
 use crate::msg::{LatestHeightResponse, HandleMsg, InitMsg, QueryMsg};
 use crate::{ingest_finalized_header, initialize_db};
 use crate::types::{ConsensusState, ClientState ,JsonHeader, Header};
-use crate::common::LightAuthoritySet;
+use crate::common::types::light_authority_set::LightAuthoritySet;
 use parity_scale_codec::Decode;
 use sp_runtime::Justification;
 

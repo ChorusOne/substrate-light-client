@@ -1753,9 +1753,9 @@ dependencies = [
 
 [[package]]
 name = "sp-api"
-version = "2.0.0-alpha.6"
+version = "2.0.0-rc3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6a4df52a0c56d742fc75f4da486627c1b050be2ac87cc042c2c0246756f22d2"
+checksum = "77948b822c0baff24c6d2c8c0f01f1cd65b1643b3bd21d2425c51ae651f37ced"
 dependencies = [
  "hash-db",
  "parity-scale-codec",
@@ -1875,14 +1875,17 @@ dependencies = [
 
 [[package]]
 name = "sp-finality-grandpa"
-version = "2.0.0-alpha.6"
+version = "2.0.0-rc3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e7107d11f07fb400a0d71838225865e2bf27f79241751ef9ff1501980dd63b3"
+checksum = "6476c3fe8128cc3348a6da19ccc477eb81c86ad8a33c96253cef366a66de2bf4"
 dependencies = [
+ "finality-grandpa",
+ "log",
  "parity-scale-codec",
  "serde",
  "sp-api",
  "sp-application-crypto",
+ "sp-core",
  "sp-runtime",
  "sp-std",
 ]
@@ -1945,9 +1948,9 @@ dependencies = [
 
 [[package]]
 name = "sp-runtime"
-version = "2.0.0-alpha.6"
+version = "2.0.0-rc3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb1f98caf8bb20c7d69ba3097f3283ebc615f4a33e79ae0ca5934364be5776ac"
+checksum = "9578b261bff85f93b03bc0445bee257fea8d68c5cd1b6817506da306fd13e063"
 dependencies = [
  "hash256-std-hasher",
  "impl-trait-for-tuples",
@@ -2059,9 +2062,9 @@ dependencies = [
 
 [[package]]
 name = "sp-version"
-version = "2.0.0-alpha.6"
+version = "2.0.0-rc3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "319c37fa4aa91ee9ee9c20a3fab0d5b6b1bbe1dea997319c303f28a62f49765d"
+checksum = "cd13d876f1e98e4323d55cdafa44ae0116ca7ace1f0abb7f09c53e51be6b90b6"
 dependencies = [
  "impl-serde 0.2.3",
  "parity-scale-codec",
@@ -2129,7 +2132,7 @@ dependencies = [
 
 [[package]]
 name = "substrate_client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clear_on_drop",
  "cosmwasm",
@@ -2146,6 +2149,7 @@ dependencies = [
  "schemars",
  "serde",
  "sp-api",
+ "sp-application-crypto",
  "sp-core",
  "sp-finality-grandpa",
  "sp-keyring",

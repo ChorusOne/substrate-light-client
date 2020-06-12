@@ -1,6 +1,6 @@
 [package]
 name = "substrate_client"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Chorus One"]
 edition = "2018"
 
@@ -9,14 +9,15 @@ edition = "2018"
 [dependencies]
 kvdb = "0.5.0"
 finality-grandpa = {version = "0.12.3", features = ["derive-codec"] }
-sp-runtime = "=2.0.0-alpha.6"
+sp-runtime = "2.0.0-rc3"
+sp-application-crypto = "2.0.0-rc3"
 parity-scale-codec = "1.3.0"
 parity-scale-codec-derive = "1.2.0"
 parity-util-mem = "0.6.1"
 parking_lot = "0.10.2"
-sp-api = "2.0.0-alpha.6"
-sp-core = "2.0.0-alpha.6"
-sp-finality-grandpa = "2.0.0-alpha.6"
+sp-api = "2.0.0-rc3"
+sp-core = "2.0.0-rc3"
+sp-finality-grandpa = "2.0.0-rc3"
 cosmwasm = "0.7.2"
 cw-storage = "0.2.0"
 schemars = "=0.5.0"
