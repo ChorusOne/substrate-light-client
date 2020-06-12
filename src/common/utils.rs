@@ -1,104 +1,33 @@
+use crate::common::traits::aux_store::AuxStore;
+use crate::common::types::blockchain_error::BlockchainError;
+use crate::common::types::light_authority_set::LightAuthoritySet;
+use crate::common::types::next_change_in_authority::NextChangeInAuthority;
 use crate::db;
 use crate::storage::Storage;
-use crate::types::Block;
 use parity_scale_codec::alloc::sync::Arc;
 use parity_scale_codec::{Decode, Encode};
-use sc_client::light::backend::Backend;
-use sc_client_api::AuxStore;
-use sp_blockchain::Error as BlockchainError;
-use sp_finality_grandpa::{AuthorityList, ScheduledChange};
-use sp_runtime::traits::{Block as BlockT, HashFor, NumberFor};
+use sp_runtime::traits::Block as BlockT;
 
 // Purposely shorthanded name just to save few bytes of storage
 pub const NEXT_CHANGE_IN_AUTHORITY_KEY: &'static [u8] = b"nca";
 pub static GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY: &[u8] = b"grandpa_aci";
 
+/// LightAuthoritySet is saved under this key in aux storage.
+pub const LIGHT_AUTHORITY_SET_KEY: &[u8] = b"grandpa_voters";
+
 // Columns supported in our in memory db
 pub const NUM_COLUMNS: u32 = 11;
 
-/// LightAuthoritySet is saved under this key in aux storage.
-pub const LIGHT_AUTHORITY_SET_KEY: &[u8] = b"grandpa_voters";
-/// Latest authority set tracker.
-#[derive(Debug, Encode, Decode, Clone)]
-pub struct LightAuthoritySet {
-    set_id: u64,
-    authorities: AuthorityList,
-}
-
-impl LightAuthoritySet {
-    pub fn new(set_id: u64, authorities: AuthorityList) -> Self {
-        Self {
-            set_id,
-            authorities,
-        }
-    }
-
-    pub fn construct_next_authority_set(
-        prev_authority_set: &LightAuthoritySet,
-        new_authority_list: AuthorityList,
-    ) -> Self {
-        Self {
-            set_id: prev_authority_set.set_id + 1,
-            authorities: new_authority_list,
-        }
-    }
-
-    pub fn set_id(&self) -> u64 {
-        self.set_id
-    }
-
-    pub fn authorities(&self) -> AuthorityList {
-        self.authorities.clone()
-    }
-}
-
-#[derive(Encode, Decode)]
-pub struct NextChangeInAuthority<Block>
-where
-    Block: BlockT,
-{
-    pub next_change_at: NumberFor<Block>,
-    pub change: ScheduledChange<NumberFor<Block>>,
-}
-
-impl<Block> NextChangeInAuthority<Block>
-where
-    Block: BlockT,
-{
-    pub fn new(
-        next_change_at: NumberFor<Block>,
-        change: ScheduledChange<NumberFor<Block>>,
-    ) -> Self {
-        Self {
-            next_change_at,
-            change,
-        }
-    }
-}
-
-pub struct Status<Block>
-where
-    Block: BlockT,
-{
-    pub possible_finalized_header: Option<Block::Header>,
-    pub possible_light_authority_set: Option<LightAuthoritySet>,
-    pub possible_next_change_in_authority: Option<NextChangeInAuthority<Block>>,
-    pub possible_best_header: Option<Block::Header>,
-}
-
-pub fn initialize_backend(
+pub fn initialize_storage(
     encoded_data: Vec<u8>,
     max_non_finalized_blocks_allowed: u64,
-) -> Result<(Arc<Backend<Storage, HashFor<Block>>>, db::Data), BlockchainError> {
+) -> (db::Data, Arc<Storage>) {
     let data = db::Data::decode(&mut encoded_data.as_slice()).unwrap();
 
-    let light_storage = Storage::new(data.clone(), max_non_finalized_blocks_allowed);
-
-    let light_blockchain = sc_client::light::new_light_blockchain::<Block, _>(light_storage);
-    Ok((
-        sc_client::light::new_light_backend::<Block, _>(light_blockchain.clone()),
-        data,
-    ))
+    return (
+        data.clone(),
+        Arc::new(Storage::new(data, max_non_finalized_blocks_allowed)),
+    );
 }
 
 pub fn store_next_authority_change<AS, Block>(
