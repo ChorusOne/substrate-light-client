@@ -1,14 +1,16 @@
+use crate::common::traits::aux_store::AuxStore;
+use crate::common::traits::header_backend::HeaderBackend;
+use crate::common::traits::header_metadata::HeaderMetadata;
+use crate::common::traits::storage::Storage as StorageT;
+use crate::common::types::block_status::BlockStatus;
+use crate::common::types::blockchain_error::BlockchainError;
+use crate::common::types::blockchain_info::BlockchainInfo;
+use crate::common::types::blockchain_result::BlockchainResult;
+use crate::common::types::cached_header_metadata::CachedHeaderMetadata;
+use crate::common::types::new_block_state::NewBlockState;
 use crate::db::Data;
 use kvdb::{DBTransaction, KeyValueDB};
-use parity_scale_codec::alloc::collections::HashMap;
-use parity_scale_codec::alloc::sync::Arc;
 use parity_scale_codec::{Decode, Encode};
-use sc_client::light::blockchain::BlockchainCache;
-use sc_client_api::{AuxStore, NewBlockState, Storage as StorageT, UsageInfo};
-use sp_blockchain::{
-    well_known_cache_keys, BlockStatus, CachedHeaderMetadata, HeaderBackend, HeaderMetadata, Info,
-};
-use sp_blockchain::{Error as ClientError, Result as ClientResult};
 use sp_runtime::generic::BlockId;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor, One, Zero};
 use std::io;
@@ -41,12 +43,12 @@ where
     pub non_finalized_blocks: u64,
 }
 
-fn db_err(err: io::Error) -> sp_blockchain::Error {
-    sp_blockchain::Error::Backend(format!("{}", err))
+fn db_err(err: io::Error) -> BlockchainError {
+    BlockchainError::Backend(format!("{}", err))
 }
 
-fn codec_error(err: parity_scale_codec::Error) -> sp_blockchain::Error {
-    sp_blockchain::Error::CallResultDecode("", err)
+fn codec_error(err: parity_scale_codec::Error) -> BlockchainError {
+    BlockchainError::DataDecode(err.to_string())
 }
 
 pub struct Storage {
@@ -62,7 +64,7 @@ impl Storage {
         }
     }
 
-    fn fetch_meta<N, H>(&self) -> ClientResult<Option<StorageMeta<N, H>>>
+    fn fetch_meta<N, H>(&self) -> BlockchainResult<Option<StorageMeta<N, H>>>
     where
         N: Encode + Decode,
         H: Encode + Decode,
@@ -78,7 +80,7 @@ impl Storage {
         }
     }
 
-    fn store_meta<N, H>(&self, meta: StorageMeta<N, H>) -> ClientResult<()>
+    fn store_meta<N, H>(&self, meta: StorageMeta<N, H>) -> BlockchainResult<()>
     where
         N: Encode + Decode,
         H: Encode + Decode,
@@ -119,7 +121,7 @@ impl Storage {
         hash.encode()
     }
 
-    fn id<Block>(&self, block_id: BlockId<Block>) -> ClientResult<Option<Vec<u8>>>
+    fn id<Block>(&self, block_id: BlockId<Block>) -> BlockchainResult<Option<Vec<u8>>>
     where
         Block: BlockT,
     {
@@ -140,7 +142,7 @@ impl Storage {
         }
     }
 
-    fn header_hash<Block>(&self, number: NumberFor<Block>) -> ClientResult<Option<Block::Hash>>
+    fn header_hash<Block>(&self, number: NumberFor<Block>) -> BlockchainResult<Option<Block::Hash>>
     where
         Block: BlockT,
     {
@@ -171,7 +173,7 @@ impl AuxStore for Storage {
         &self,
         insert: I,
         delete: D,
-    ) -> ClientResult<()> {
+    ) -> BlockchainResult<()> {
         let mut tx = self.data.db.transaction();
         for (k, v) in insert {
             tx.put(AUX_COLUMN, *k, *v);
@@ -184,7 +186,7 @@ impl AuxStore for Storage {
         self.data.db.write(tx).map_err(db_err)
     }
 
-    fn get_aux(&self, key: &[u8]) -> ClientResult<Option<Vec<u8>>> {
+    fn get_aux(&self, key: &[u8]) -> BlockchainResult<Option<Vec<u8>>> {
         self.data.db.get(AUX_COLUMN, key).map_err(db_err)
     }
 }
@@ -193,7 +195,7 @@ impl<Block> HeaderBackend<Block> for Storage
 where
     Block: BlockT,
 {
-    fn header(&self, id: BlockId<Block>) -> ClientResult<Option<Block::Header>> {
+    fn header(&self, id: BlockId<Block>) -> BlockchainResult<Option<Block::Header>> {
         let possible_header_key = self.id(id)?;
         if possible_header_key.is_none() {
             Ok(None)
@@ -215,9 +217,9 @@ where
         }
     }
 
-    fn info(&self) -> Info<Block> {
+    fn info(&self) -> BlockchainInfo<Block> {
         let meta = self.fetch_meta();
-        let default_info = Info {
+        let default_info = BlockchainInfo {
             best_hash: Default::default(),
             best_number: Zero::zero(),
             genesis_hash: Default::default(),
@@ -231,7 +233,7 @@ where
                 default_info
             } else {
                 let meta = meta.unwrap();
-                Info {
+                BlockchainInfo {
                     best_hash: meta.best_hash,
                     best_number: meta.best_number,
                     genesis_hash: meta.genesis_hash,
@@ -245,7 +247,7 @@ where
         }
     }
 
-    fn status(&self, id: BlockId<Block>) -> ClientResult<BlockStatus> {
+    fn status(&self, id: BlockId<Block>) -> BlockchainResult<BlockStatus> {
         let possible_header = self.header(id)?;
         if possible_header.is_none() {
             Ok(BlockStatus::Unknown)
@@ -257,7 +259,7 @@ where
     fn number(
         &self,
         hash: Block::Hash,
-    ) -> ClientResult<Option<<Block::Header as HeaderT>::Number>> {
+    ) -> BlockchainResult<Option<<Block::Header as HeaderT>::Number>> {
         let possible_header: Option<Block::Header> = self.header(BlockId::<Block>::Hash(hash))?;
         if possible_header.is_none() {
             Ok(None)
@@ -267,7 +269,7 @@ where
         }
     }
 
-    fn hash(&self, number: NumberFor<Block>) -> ClientResult<Option<Block::Hash>> {
+    fn hash(&self, number: NumberFor<Block>) -> BlockchainResult<Option<Block::Hash>> {
         self.header_hash::<Block>(number)
     }
 }
@@ -283,10 +285,9 @@ where
     fn import_header(
         &self,
         header: Block::Header,
-        cache: HashMap<well_known_cache_keys::Id, Vec<u8>>,
         state: NewBlockState,
         aux_ops: Vec<(Vec<u8>, Option<Vec<u8>>)>,
-    ) -> ClientResult<()> {
+    ) -> BlockchainResult<()> {
         assert!(
             state.is_best(),
             "Since, we are only following one fork block state must need to be best"
@@ -307,7 +308,7 @@ where
         };
 
         if meta.non_finalized_blocks >= self.max_non_finalized_blocks_allowed {
-            return Err(ClientError::Backend(format!(
+            return Err(BlockchainError::Backend(format!(
                 "Cannot import any more blocks, before finalizing previous blocks"
             )));
         }
@@ -324,7 +325,7 @@ where
         if !first_imported_header {
             let possible_parent_header = self.header(BlockId::<Block>::Hash(meta.best_hash))?;
             if possible_parent_header.is_none() {
-                return Err(ClientError::UnknownBlock(format!(
+                return Err(BlockchainError::UnknownBlock(format!(
                     "Could not find parent of importing block"
                 )));
             }
@@ -332,10 +333,10 @@ where
             if *header.parent_hash() != parent_header.hash()
                 || header.number() <= parent_header.number()
             {
-                return Err(ClientError::NotInFinalizedChain);
+                return Err(BlockchainError::NotInFinalizedChain);
             }
             if *header.number() != meta.best_number + One::one() {
-                return Err(ClientError::NonSequentialFinalization(format!(
+                return Err(BlockchainError::NonSequentialFinalization(format!(
                     "tried to import non sequential block. Expected block number: {}. Got: {}",
                     meta.best_number + One::one(),
                     *header.number()
@@ -356,15 +357,15 @@ where
     }
 
     /// Set an existing block as new best block.
-    fn set_head(&self, block: BlockId<Block>) -> ClientResult<()> {
+    fn set_head(&self, block: BlockId<Block>) -> BlockchainResult<()> {
         unimplemented!()
     }
 
     /// Mark historic header as finalized.
-    fn finalize_header(&self, block: BlockId<Block>) -> ClientResult<()> {
+    fn finalize_header(&self, block: BlockId<Block>) -> BlockchainResult<()> {
         let possible_to_be_finalized_header = self.header(block)?;
         if possible_to_be_finalized_header.is_none() {
-            return Err(ClientError::UnknownBlock(format!(
+            return Err(BlockchainError::UnknownBlock(format!(
                 "Error: {}",
                 "Could not find block header to finalize"
             )));
@@ -372,7 +373,7 @@ where
         let to_be_finalized_header = possible_to_be_finalized_header.unwrap();
         let possible_meta = self.fetch_meta()?;
         if possible_meta.is_none() {
-            return Err(ClientError::Backend(format!(
+            return Err(BlockchainError::Backend(format!(
                 "Error: {}",
                 "Unable to get metadata about blockchain"
             )));
@@ -384,7 +385,7 @@ where
             && *to_be_finalized_header.parent_hash() != meta.finalized_hash)
             || (first_block_to_be_finalized && to_be_finalized_header.hash() != meta.genesis_hash)
         {
-            return Err(ClientError::NonSequentialFinalization(format!("Error: {}", "to be finalized block need to be child of last finalized block or first block itself")));
+            return Err(BlockchainError::NonSequentialFinalization(format!("Error: {}", "to be finalized block need to be child of last finalized block or first block itself")));
         }
 
         meta.non_finalized_blocks -= 1;
@@ -400,44 +401,16 @@ where
     }
 
     /// Get last finalized header.
-    fn last_finalized(&self) -> ClientResult<Block::Hash> {
+    fn last_finalized(&self) -> BlockchainResult<Block::Hash> {
         let possible_meta: Option<StorageMeta<NumberFor<Block>, Block::Hash>> =
             self.fetch_meta()?;
         if possible_meta.is_none() {
-            return Err(ClientError::Backend(format!(
+            return Err(BlockchainError::Backend(format!(
                 "Error: {}",
                 "Unable to get metadata about blockchain"
             )));
         }
         Ok(possible_meta.unwrap().finalized_hash)
-    }
-
-    /// Get headers CHT root for given block. Returns None if the block is not pruned (not a part of any CHT).
-    fn header_cht_root(
-        &self,
-        cht_size: NumberFor<Block>,
-        block: NumberFor<Block>,
-    ) -> ClientResult<Option<Block::Hash>> {
-        unimplemented!()
-    }
-
-    /// Get changes trie CHT root for given block. Returns None if the block is not pruned (not a part of any CHT).
-    fn changes_trie_cht_root(
-        &self,
-        cht_size: NumberFor<Block>,
-        block: NumberFor<Block>,
-    ) -> ClientResult<Option<Block::Hash>> {
-        unimplemented!()
-    }
-
-    /// Get storage cache.
-    fn cache(&self) -> Option<Arc<dyn BlockchainCache<Block>>> {
-        unimplemented!()
-    }
-
-    /// Get storage usage statistics.
-    fn usage_info(&self) -> Option<UsageInfo> {
-        unimplemented!()
     }
 }
 
@@ -445,7 +418,7 @@ impl<Block> HeaderMetadata<Block> for Storage
 where
     Block: BlockT,
 {
-    type Error = ClientError;
+    type Error = BlockchainError;
 
     fn header_metadata(
         &self,
@@ -453,7 +426,7 @@ where
     ) -> Result<CachedHeaderMetadata<Block>, Self::Error> {
         let possible_header = self.header(BlockId::<Block>::Hash(hash))?;
         if possible_header.is_none() {
-            Err(ClientError::UnknownBlock(format!(
+            Err(BlockchainError::UnknownBlock(format!(
                 "header not found in db: {}",
                 hash
             )))

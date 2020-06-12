@@ -6,24 +6,29 @@ mod db;
 mod genesis;
 mod grandpa_block_import;
 mod justification;
-mod runtime;
 mod storage;
 mod types;
 mod verifier;
 
 use crate::block_processor::setup_block_processor;
-use crate::common::{
-    fetch_light_authority_set, fetch_next_authority_change, initialize_backend,
-    insert_light_authority_set, LightAuthoritySet, Status, NUM_COLUMNS,
+use crate::common::traits::header_backend::HeaderBackend;
+use crate::common::traits::storage::Storage as StorageT;
+use crate::common::types::block_import_result::BlockImportResult;
+use crate::common::types::blockchain_error::BlockchainError;
+use crate::common::types::blockchain_info::BlockchainInfo;
+use crate::common::types::client_status::ClientStatus;
+use crate::common::types::incoming_block::IncomingBlock;
+use crate::common::types::light_authority_set::LightAuthoritySet;
+use crate::common::types::new_block_state::NewBlockState;
+use crate::common::utils::{
+    fetch_light_authority_set, fetch_next_authority_change, initialize_storage,
+    insert_light_authority_set, NUM_COLUMNS,
 };
 use crate::db::create;
 use crate::genesis::GenesisData;
 use crate::types::{Block, Header};
 use parity_scale_codec::Encode;
-use sc_client_api::{Backend, BlockImportOperation, NewBlockState};
 use sp_api::BlockId;
-use sp_blockchain::{Error as BlockchainError, HeaderBackend, Info};
-use sp_consensus::import_queue::{BlockImportResult, IncomingBlock};
 use sp_runtime::traits::{Block as BlockT, NumberFor};
 use sp_runtime::Justification;
 
@@ -44,40 +49,36 @@ pub fn initialize_db(
         genesis_data: GenesisData {},
     };
     let empty_data = new_data.encode();
-    let (backend, data) = initialize_backend(empty_data, 1)?;
-    insert_light_authority_set(backend.clone(), initial_authority_set)?;
-
-    // Ingest initial header
-    let mut backend_op: sc_client::light::backend::ImportOperation<Block, storage::Storage> =
-        backend.begin_operation()?;
-    backend_op.set_block_data(initial_header, None, None, NewBlockState::Best)?;
-    backend.commit_operation(backend_op)?;
+    let (data, storage) = initialize_storage(empty_data, 1);
+    insert_light_authority_set(storage.clone(), initial_authority_set)?;
+    StorageT::<Block>::import_header(
+        storage.as_ref(),
+        initial_header,
+        NewBlockState::Best,
+        vec![],
+    )?;
 
     Ok(data.encode())
 }
 
-pub fn current_status<Block>(encoded_data: Vec<u8>) -> Result<Status<Block>, BlockchainError>
+pub fn current_status<Block>(encoded_data: Vec<u8>) -> Result<ClientStatus<Block>, BlockchainError>
 where
     Block: BlockT,
 {
-    let (backend, _) = initialize_backend(encoded_data, 1)?;
-    let possible_light_authority_set = fetch_light_authority_set(backend.clone())?;
+    let (_, storage) = initialize_storage(encoded_data, 1);
+    let possible_light_authority_set = fetch_light_authority_set(storage.clone())?;
     let mut possible_finalized_header: Option<Block::Header> = None;
     let mut possible_best_header: Option<Block::Header> = None;
-    let info: Info<Block> = backend.blockchain().info();
+    let info: BlockchainInfo<Block> = storage.info();
     if info.finalized_hash != Default::default() {
-        possible_finalized_header = backend
-            .blockchain()
-            .header(BlockId::<Block>::Hash(info.finalized_hash))?;
+        possible_finalized_header = storage.header(BlockId::<Block>::Hash(info.finalized_hash))?;
     }
     if info.best_hash != Default::default() {
-        possible_best_header = backend
-            .blockchain()
-            .header(BlockId::<Block>::Hash(info.best_hash))?;
+        possible_best_header = storage.header(BlockId::<Block>::Hash(info.best_hash))?;
     }
-    let possible_next_change_in_authority = fetch_next_authority_change(backend.clone())?;
+    let possible_next_change_in_authority = fetch_next_authority_change(storage.clone())?;
 
-    Ok(Status {
+    Ok(ClientStatus {
         possible_finalized_header,
         possible_light_authority_set,
         possible_next_change_in_authority,
@@ -100,7 +101,6 @@ pub fn ingest_finalized_header(
         header: Some(finalized_header),
         body: None,
         justification,
-        origin: None,
         allow_missing_state: false,
         import_existing: false,
     };
@@ -110,7 +110,7 @@ pub fn ingest_finalized_header(
     let block_import_response = block_processor_fn(incoming_block)?;
     match &block_import_response {
         BlockImportResult::ImportedKnown(_) => {}
-        BlockImportResult::ImportedUnknown(_, aux, _) => {
+        BlockImportResult::ImportedUnknown(_, aux) => {
             if aux.bad_justification || aux.needs_finality_proof {
                 return Err(format!(
                     "Error: {}",
@@ -124,31 +124,22 @@ pub fn ingest_finalized_header(
 
 #[cfg(test)]
 mod tests {
-    use crate::common::{
-        fetch_light_authority_set, fetch_next_authority_change, initialize_backend,
-        LightAuthoritySet, NextChangeInAuthority,
-    };
+    use crate::common::types::light_authority_set::LightAuthoritySet;
     use crate::justification::{Commit, GrandpaJustification, Message, Precommit};
-    use crate::storage::Storage;
     use crate::types::{Block, Header};
     use crate::{current_status, ingest_finalized_header, initialize_db};
     use clear_on_drop::clear::Clear;
     use finality_grandpa::SignedPrecommit;
-    use parity_scale_codec::alloc::sync::Arc;
-    use parity_scale_codec::{Decode, Encode};
-    use sc_client_api::Storage as StorageT;
-    use sp_blockchain::Backend;
+    use parity_scale_codec::Encode;
     use sp_core::crypto::Public;
-    use sp_core::{ed25519, H256};
+    use sp_core::H256;
     use sp_finality_grandpa::{
         AuthorityId, AuthorityList, AuthoritySignature, ScheduledChange, GRANDPA_ENGINE_ID,
     };
     use sp_keyring::ed25519::Keyring;
     use sp_keyring::Ed25519Keyring;
-    use sp_runtime::traits::{Block as BlockT, HashFor, Header as HeaderT, NumberFor, One};
+    use sp_runtime::traits::{Header as HeaderT, NumberFor, One};
     use sp_runtime::{DigestItem, Justification};
-    use std::hash::Hash;
-    use std::io;
     use std::io::Write;
     use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -563,7 +554,7 @@ mod tests {
         // Let's change number of block to be non sequential
         next_header.number += 1;
 
-        assert_failed_header_ingestion(encoded_data, next_header, None, String::from("Other(ClientImport(\"Import failed: Did not finalize blocks in sequential order.\"))"), 1);
+        assert_failed_header_ingestion(encoded_data, next_header, None, String::from("Other(ClientImport(\"Import failed: Did not finalize blocks in sequential order. tried to import non sequential block. Expected block number: 2. Got: 3\"))"), 1);
     }
 
     #[test]
@@ -637,7 +628,7 @@ mod tests {
             encoded_data.clone(),
             next_header.clone(),
             None,
-            String::from("VerificationFailed(None, \"Scheduled change already exists.\")"),
+            String::from("VerificationFailed(\"Scheduled change already exists.\")"),
             1,
         );
         // After clearing digest we should be able to ingest header
