@@ -1,44 +1,165 @@
-use parity_scale_codec::alloc::collections::hash_map::RandomState;
-use parity_scale_codec::alloc::collections::HashMap;
+use crate::common::traits::block_import::BlockImport;
+use crate::common::traits::finalizer::Finalizer;
+use crate::common::traits::header_backend::HeaderBackend;
+use crate::common::traits::header_metadata::HeaderMetadata;
+use crate::common::traits::storage::Storage;
+use crate::common::types::block_check_params::BlockCheckParams;
+use crate::common::types::block_import_params::BlockImportParams;
+use crate::common::types::block_import_status::BlockImportStatus as ImportBlockStatus;
+use crate::common::types::block_status::BlockStatus;
+use crate::common::types::blockchain_error::BlockchainError;
+use crate::common::types::blockchain_info::BlockchainInfo;
+use crate::common::types::blockchain_result::BlockchainResult;
+use crate::common::types::cached_header_metadata::CachedHeaderMetadata;
+use crate::common::types::consensus_error::ConsensusError;
+use crate::common::types::import_result::ImportResult;
+use crate::common::types::new_block_state::NewBlockState;
 use parity_scale_codec::alloc::sync::Arc;
-use sc_client_api::backend::{BlockImportOperation, Finalizer};
-use sc_client_api::{Backend, ClientImportOperation, NewBlockState, TransactionFor};
-use sp_blockchain::Error::Consensus;
-use sp_blockchain::{
-    Backend as BlockchainBackend, BlockStatus, CachedHeaderMetadata, Error as BlockchainError,
-    HeaderBackend, HeaderMetadata, Info, Result as BlockchainResult,
-};
-use sp_consensus::{
-    BlockCheckParams, BlockImport, BlockImportParams, BlockStatus as ImportBlockStatus,
-    Error as ConsensusError, ImportResult,
-};
 use sp_runtime::generic::BlockId;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 
-pub struct Client<B> {
-    backend: Arc<B>,
+/// Hash and number of a block.
+#[derive(Debug, Clone)]
+pub struct HashAndNumber<Block: BlockT> {
+    /// The number of the block.
+    pub number: NumberFor<Block>,
+    /// The hash of the block.
+    pub hash: Block::Hash,
 }
 
-impl<B> Client<B> {
-    pub fn new(backend: Arc<B>) -> Self {
+/// A tree-route from one block to another in the chain.
+///
+/// All blocks prior to the pivot in the deque is the reverse-order unique ancestry
+/// of the first block, the block at the pivot index is the common ancestor,
+/// and all blocks after the pivot is the ancestry of the second block, in
+/// order.
+///
+/// The ancestry sets will include the given blocks, and thus the tree-route is
+/// never empty.
+///
+/// ```text
+/// Tree route from R1 to E2. Retracted is [R1, R2, R3], Common is C, enacted [E1, E2]
+///   <- R3 <- R2 <- R1
+///  /
+/// C
+///  \-> E1 -> E2
+/// ```
+///
+/// ```text
+/// Tree route from C to E2. Retracted empty. Common is C, enacted [E1, E2]
+/// C -> E1 -> E2
+/// ```
+#[derive(Debug)]
+pub struct TreeRoute<Block: BlockT> {
+    route: Vec<HashAndNumber<Block>>,
+    pivot: usize,
+}
+
+impl<Block: BlockT> TreeRoute<Block> {
+    /// Get a slice of all retracted blocks in reverse order (towards common ancestor)
+    pub fn retracted(&self) -> &[HashAndNumber<Block>] {
+        &self.route[..self.pivot]
+    }
+
+    /// Get the common ancestor block. This might be one of the two blocks of the
+    /// route.
+    pub fn common_block(&self) -> &HashAndNumber<Block> {
+        self.route.get(self.pivot).expect(
+            "tree-routes are computed between blocks; \
+			which are included in the route; \
+			thus it is never empty; qed",
+        )
+    }
+
+    /// Get a slice of enacted blocks (descendents of the common ancestor)
+    pub fn enacted(&self) -> &[HashAndNumber<Block>] {
+        &self.route[self.pivot + 1..]
+    }
+}
+
+/// Compute a tree-route between two blocks. See tree-route docs for more details.
+fn tree_route<Block: BlockT, T: HeaderMetadata<Block>>(
+    backend: &T,
+    from: Block::Hash,
+    to: Block::Hash,
+) -> Result<TreeRoute<Block>, T::Error> {
+    let mut from = backend.header_metadata(from)?;
+    let mut to = backend.header_metadata(to)?;
+
+    let mut from_branch = Vec::new();
+    let mut to_branch = Vec::new();
+
+    while to.number > from.number {
+        to_branch.push(HashAndNumber {
+            number: to.number,
+            hash: to.hash,
+        });
+
+        to = backend.header_metadata(to.parent)?;
+    }
+
+    while from.number > to.number {
+        from_branch.push(HashAndNumber {
+            number: from.number,
+            hash: from.hash,
+        });
+        from = backend.header_metadata(from.parent)?;
+    }
+
+    // numbers are equal now. walk backwards until the block is the same
+
+    while to.hash != from.hash {
+        to_branch.push(HashAndNumber {
+            number: to.number,
+            hash: to.hash,
+        });
+        to = backend.header_metadata(to.parent)?;
+
+        from_branch.push(HashAndNumber {
+            number: from.number,
+            hash: from.hash,
+        });
+        from = backend.header_metadata(from.parent)?;
+    }
+
+    // add the pivot block. and append the reversed to-branch (note that it's reverse order originals)
+    let pivot = from_branch.len();
+    from_branch.push(HashAndNumber {
+        number: to.number,
+        hash: to.hash,
+    });
+    from_branch.extend(to_branch.into_iter().rev());
+
+    Ok(TreeRoute {
+        route: from_branch,
+        pivot,
+    })
+}
+
+pub struct Client<S> {
+    storage: Arc<S>,
+}
+
+impl<S> Client<S> {
+    pub fn new(storage: Arc<S>) -> Self {
         Self {
-            backend: backend.clone(),
+            storage: storage.clone(),
         }
     }
 }
 
-impl<B> Clone for Client<B> {
+impl<S> Clone for Client<S> {
     fn clone(&self) -> Self {
         Self {
-            backend: self.backend.clone(),
+            storage: self.storage.clone(),
         }
     }
 }
 
-impl<B, Block> HeaderMetadata<Block> for Client<B>
+impl<S, Block> HeaderMetadata<Block> for Client<S>
 where
     Block: BlockT,
-    B: Backend<Block>,
+    S: Storage<Block>,
 {
     /// Error used in case the header metadata is not found.
     type Error = BlockchainError;
@@ -47,38 +168,36 @@ where
         &self,
         hash: Block::Hash,
     ) -> Result<CachedHeaderMetadata<Block>, Self::Error> {
-        self.backend.blockchain().header_metadata(hash)
+        self.storage.header_metadata(hash)
     }
 
     fn insert_header_metadata(&self, hash: Block::Hash, metadata: CachedHeaderMetadata<Block>) {
-        self.backend
-            .blockchain()
-            .insert_header_metadata(hash, metadata)
+        self.storage.insert_header_metadata(hash, metadata)
     }
 
     fn remove_header_metadata(&self, hash: Block::Hash) {
-        self.backend.blockchain().remove_header_metadata(hash)
+        self.storage.remove_header_metadata(hash)
     }
 }
 
-impl<B, Block> HeaderBackend<Block> for Client<B>
+impl<S, Block> HeaderBackend<Block> for Client<S>
 where
     Block: BlockT,
-    B: Sync + Send + Backend<Block>,
+    S: Storage<Block>,
 {
     /// Get block header. Returns `None` if block is not found.
     fn header(&self, id: BlockId<Block>) -> BlockchainResult<Option<Block::Header>> {
-        self.backend.blockchain().header(id)
+        self.storage.header(id)
     }
 
     /// Get blockchain info.
-    fn info(&self) -> Info<Block> {
-        self.backend.blockchain().info()
+    fn info(&self) -> BlockchainInfo<Block> {
+        self.storage.info()
     }
 
     /// Get block status.
     fn status(&self, id: BlockId<Block>) -> BlockchainResult<BlockStatus> {
-        self.backend.blockchain().status(id)
+        self.storage.status(id)
     }
 
     /// Get block number by hash. Returns `None` if the header is not in the chain.
@@ -86,19 +205,19 @@ where
         &self,
         hash: Block::Hash,
     ) -> BlockchainResult<Option<<<Block as BlockT>::Header as HeaderT>::Number>> {
-        self.backend.blockchain().number(hash)
+        self.storage.number(hash)
     }
 
     /// Get block hash by number. Returns `None` if the header is not in the chain.
     fn hash(&self, number: NumberFor<Block>) -> BlockchainResult<Option<Block::Hash>> {
-        self.backend.blockchain().hash(number)
+        self.storage.hash(number)
     }
 }
 
-impl<B, Block> HeaderBackend<Block> for &Client<B>
+impl<S, Block> HeaderBackend<Block> for &Client<S>
 where
     Block: BlockT,
-    B: Sync + Send + Backend<Block>,
+    S: Storage<Block>,
 {
     /// Get block header. Returns `None` if block is not found.
     fn header(&self, id: BlockId<Block>) -> BlockchainResult<Option<Block::Header>> {
@@ -106,7 +225,7 @@ where
     }
 
     /// Get blockchain info.
-    fn info(&self) -> Info<Block> {
+    fn info(&self) -> BlockchainInfo<Block> {
         (**self).info()
     }
 
@@ -129,13 +248,12 @@ where
     }
 }
 
-impl<B, Block> BlockImport<Block> for &Client<B>
+impl<S, Block> BlockImport<Block> for &Client<S>
 where
     Block: BlockT,
-    B: Backend<Block>,
+    S: Storage<Block>,
 {
     type Error = ConsensusError;
-    type Transaction = TransactionFor<B, Block>;
 
     fn check_block(&mut self, block: BlockCheckParams<Block>) -> Result<ImportResult, Self::Error> {
         let BlockCheckParams {
@@ -148,17 +266,11 @@ where
 
         let block_status = |id: &BlockId<Block>| -> BlockchainResult<ImportBlockStatus> {
             let hash_and_number = match id.clone() {
-                BlockId::Hash(hash) => self.backend.blockchain().number(hash)?.map(|n| (hash, n)),
-                BlockId::Number(n) => self.backend.blockchain().hash(n)?.map(|hash| (hash, n)),
+                BlockId::Hash(hash) => self.number(hash)?.map(|n| (hash, n)),
+                BlockId::Number(n) => self.hash(number)?.map(|hash| (hash, n)),
             };
             match hash_and_number {
-                Some((hash, number)) => {
-                    if self.backend.have_state_at(&hash, number) {
-                        Ok(ImportBlockStatus::InChainWithState)
-                    } else {
-                        Ok(ImportBlockStatus::InChainPruned)
-                    }
-                }
+                Some(_) => Ok(ImportBlockStatus::InChainWithState),
                 None => Ok(ImportBlockStatus::Unknown),
             }
         };
@@ -190,34 +302,18 @@ where
 
     fn import_block(
         &mut self,
-        block: BlockImportParams<Block, Self::Transaction>,
-        cache: HashMap<[u8; 4], Vec<u8>, RandomState>,
+        block: BlockImportParams<Block>,
     ) -> Result<ImportResult, Self::Error> {
         let BlockImportParams {
-            origin,
+            origin: _,
             header,
-            justification,
-            post_digests,
-            body,
-            storage_changes,
-            finalized,
-            auxiliary,
-            fork_choice,
+            justification: _,
+            auxiliary: _,
+            fork_choice: _,
             intermediates,
-            import_existing,
+            import_existing: _,
             ..
         } = block;
-
-        let mut operation: ClientImportOperation<Block, B> = ClientImportOperation {
-            op: self
-                .backend
-                .begin_operation()
-                .map_err(|e| ConsensusError::ClientImport(e.to_string()))?,
-            notify_imported: None,
-            notify_finalized: Vec::new(),
-        };
-
-        assert!(justification.is_some() && finalized || justification.is_none());
 
         if !intermediates.is_empty() {
             return Err(BlockchainError::IncompletePipeline)
@@ -225,10 +321,8 @@ where
         }
 
         let hash = header.hash();
-        let parent_hash = header.parent_hash();
-        let status: BlockStatus = self
-            .backend
-            .blockchain()
+        let status = self
+            .storage
             .status(BlockId::Hash(hash))
             .map_err(|e| ConsensusError::ClientImport(e.to_string()))?;
 
@@ -237,32 +331,20 @@ where
             BlockStatus::Unknown => {}
         }
 
-        operation
-            .op
-            .set_block_data(
-                header.clone(),
-                body,
-                justification,
-                // It's always best as we are only interested in one fork
-                NewBlockState::Best,
-            )
-            .map_err(|e| ConsensusError::ClientImport(e.to_string()))?;
-
-        self.backend
-            .commit_operation(operation.op)
+        self.storage
+            .import_header(header, NewBlockState::Best, vec![])
             .map_err(|e| ConsensusError::ClientImport(e.to_string()))?;
 
         Ok(ImportResult::imported(true))
     }
 }
 
-impl<B, Block> BlockImport<Block> for Client<B>
+impl<S, Block> BlockImport<Block> for Client<S>
 where
     Block: BlockT,
-    B: Backend<Block>,
+    S: Storage<Block>,
 {
     type Error = ConsensusError;
-    type Transaction = TransactionFor<B, Block>;
 
     fn check_block(&mut self, block: BlockCheckParams<Block>) -> Result<ImportResult, Self::Error> {
         (&*self).check_block(block)
@@ -270,31 +352,36 @@ where
 
     fn import_block(
         &mut self,
-        block: BlockImportParams<Block, Self::Transaction>,
-        new_cache: HashMap<[u8; 4], Vec<u8>, RandomState>,
+        block: BlockImportParams<Block>,
     ) -> Result<ImportResult, Self::Error> {
-        (&*self).import_block(block, new_cache)
+        (&*self).import_block(block)
     }
 }
 
-impl<B, Block> Finalizer<Block, B> for Client<B>
+impl<S, Block> Finalizer<Block> for Client<S>
 where
     Block: BlockT,
-    B: Backend<Block>,
+    S: Storage<Block>,
 {
-    fn apply_finality(
+    fn finalize_block(
         &self,
-        operation: &mut ClientImportOperation<Block, B>,
         id: BlockId<Block>,
         justification: Option<Vec<u8>>,
-        notify: bool,
     ) -> BlockchainResult<()> {
-        let to_be_finalized = self.backend.blockchain().expect_block_hash_from_id(&id)?;
-        let last_finalized = self.backend.blockchain().last_finalized()?;
+        let possible_to_be_finalized_block = self.storage.header(id)?;
+        if possible_to_be_finalized_block.is_none() {
+            return Err(BlockchainError::UnknownBlock(format!(
+                "Block: {:?} to be finalized not found in storage",
+                id
+            )));
+        }
+        let to_be_finalized = possible_to_be_finalized_block.unwrap().hash();
+
+        let info = self.storage.info();
+        let last_finalized = info.finalized_hash;
         let first_set_of_blocks_to_be_finalized = last_finalized == Default::default();
 
         let tree_route_from = if first_set_of_blocks_to_be_finalized {
-            let info = self.backend.blockchain().info();
             info.genesis_hash
         } else {
             last_finalized
@@ -305,7 +392,7 @@ where
         }
 
         let route_to_be_finalized =
-            sp_blockchain::tree_route(self.backend.blockchain(), tree_route_from, to_be_finalized)?;
+            tree_route(self.storage.as_ref(), tree_route_from, to_be_finalized)?;
 
         // Since we do not allow forks, retracted always needs to be empty and
         // enacted always need to be non-empty
@@ -316,65 +403,34 @@ where
         assert!(enacted.len() > 0);
 
         if first_set_of_blocks_to_be_finalized {
-            operation
-                .op
-                .mark_finalized(BlockId::Hash(tree_route_from), None)?;
+            self.storage
+                .finalize_header(BlockId::Hash(tree_route_from))?;
         }
 
         for finalize_new in &enacted[..enacted.len() - 1] {
-            operation
-                .op
-                .mark_finalized(BlockId::Hash(finalize_new.hash), None)?;
+            self.storage
+                .finalize_header(BlockId::Hash(finalize_new.hash))?;
         }
 
         assert_eq!(enacted.last().map(|e| e.hash), Some(to_be_finalized));
-        operation
-            .op
-            .mark_finalized(BlockId::Hash(to_be_finalized), justification)?;
+
+        self.storage
+            .finalize_header(BlockId::Hash(to_be_finalized))?;
 
         Ok(())
     }
-
-    fn finalize_block(
-        &self,
-        id: BlockId<Block>,
-        justification: Option<Vec<u8>>,
-        notify: bool,
-    ) -> BlockchainResult<()> {
-        let mut operation: ClientImportOperation<Block, B> = ClientImportOperation {
-            op: self.backend.begin_operation()?,
-            notify_imported: None,
-            notify_finalized: Vec::new(),
-        };
-        let result = self.apply_finality(&mut operation, id, justification, notify);
-        self.backend
-            .commit_operation(operation.op)
-            .map_err(|e| ConsensusError::ClientImport(e.to_string()))?;
-        result
-    }
 }
 
-impl<B, Block> Finalizer<Block, B> for &Client<B>
+impl<S, Block> Finalizer<Block> for &Client<S>
 where
     Block: BlockT,
-    B: Backend<Block>,
+    S: Storage<Block>,
 {
-    fn apply_finality(
-        &self,
-        operation: &mut ClientImportOperation<Block, B>,
-        id: BlockId<Block>,
-        justification: Option<Vec<u8>>,
-        notify: bool,
-    ) -> BlockchainResult<()> {
-        (**self).apply_finality(operation, id, justification, notify)
-    }
-
     fn finalize_block(
         &self,
         id: BlockId<Block>,
         justification: Option<Vec<u8>>,
-        notify: bool,
     ) -> BlockchainResult<()> {
-        (**self).finalize_block(id, justification, notify)
+        (**self).finalize_block(id, justification)
     }
 }

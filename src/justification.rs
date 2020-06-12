@@ -17,16 +17,18 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::common::traits::header_backend::HeaderBackend;
+use crate::common::types::blockchain_error::BlockchainError;
+use crate::common::types::blockchain_result::BlockchainResult;
 use finality_grandpa::voter_set::VoterSet;
 use finality_grandpa::{BlockNumberOps, Error as GrandpaError};
 use parity_scale_codec::{Decode, Encode};
-use sp_blockchain::{Error as ClientError, HeaderBackend, Result as ClientResult};
 use sp_core::crypto::Pair;
 use sp_finality_grandpa::{
     AuthorityId, AuthorityPair, AuthoritySignature, RoundNumber, SetId as SetIdNumber,
 };
 use sp_runtime::generic::BlockId;
-use sp_runtime::traits::{AppVerify, Block as BlockT, Header as HeaderT, NumberFor};
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 use sp_runtime::Justification;
 use std::io;
 
@@ -40,7 +42,7 @@ pub enum Error {
     /// A blockchain error.
     Blockchain(String),
     /// Could not complete a round on disk.
-    Client(ClientError),
+    Client(BlockchainError),
     /// An invariant has been violated (e.g. not finalizing pending change blocks in-order)
     Safety(String),
     /// A timer failed to fire.
@@ -53,8 +55,8 @@ impl From<GrandpaError> for Error {
     }
 }
 
-impl From<ClientError> for Error {
-    fn from(e: ClientError) -> Self {
+impl From<BlockchainError> for Error {
+    fn from(e: BlockchainError) -> Self {
         Error::Client(e)
     }
 }
@@ -66,7 +68,7 @@ pub type Precommit<Block> = finality_grandpa::Precommit<<Block as BlockT>::Hash,
 /// Justification used to prove block finality.
 pub trait ProvableJustification<Block: BlockT>: Encode + Decode {
     /// Verify justification with respect to authorities set and authorities set id.
-    fn verify(&self, set_id: u64, authorities: &[(AuthorityId, u64)]) -> ClientResult<()>;
+    fn verify(&self, set_id: u64, authorities: &[(AuthorityId, u64)]) -> BlockchainResult<()>;
 
     /// Verify justification as well as check if it is targeting correct block
     fn verify_finalization(
@@ -74,16 +76,16 @@ pub trait ProvableJustification<Block: BlockT>: Encode + Decode {
         set_id: u64,
         finalized_target: (Block::Hash, NumberFor<Block>),
         authorities: &[(AuthorityId, u64)],
-    ) -> ClientResult<()>;
+    ) -> BlockchainResult<()>;
 
     /// Decode and verify justification.
     fn decode_and_verify(
         justification: &Justification,
         set_id: u64,
         authorities: &[(AuthorityId, u64)],
-    ) -> ClientResult<Self> {
-        let justification =
-            Self::decode(&mut &**justification).map_err(|_| ClientError::JustificationDecode)?;
+    ) -> BlockchainResult<Self> {
+        let justification = Self::decode(&mut &**justification)
+            .map_err(|_| BlockchainError::JustificationDecode)?;
         justification.verify(set_id, authorities)?;
         Ok(justification)
     }
@@ -93,9 +95,9 @@ pub trait ProvableJustification<Block: BlockT>: Encode + Decode {
         set_id: u64,
         finalized_target: (Block::Hash, NumberFor<Block>),
         authorities: &[(AuthorityId, u64)],
-    ) -> ClientResult<()> {
-        let justification =
-            Self::decode(&mut &**justification).map_err(|_| ClientError::JustificationDecode)?;
+    ) -> BlockchainResult<()> {
+        let justification = Self::decode(&mut &**justification)
+            .map_err(|_| BlockchainError::JustificationDecode)?;
         justification.verify_finalization(set_id, finalized_target, authorities)
     }
 }
@@ -185,7 +187,7 @@ impl<Block: BlockT> GrandpaJustification<Block> {
 
         let error = || {
             let msg = "invalid precommits for target commit".to_string();
-            Err(Error::Client(ClientError::BadJustification(msg)))
+            Err(Error::Client(BlockchainError::BadJustification(msg)))
         };
 
         for signed in commit.precommits.iter() {
@@ -226,20 +228,20 @@ impl<Block: BlockT> GrandpaJustification<Block> {
         set_id: u64,
         finalized_target: (Block::Hash, NumberFor<Block>),
         voters: &VoterSet<AuthorityId>,
-    ) -> Result<(), ClientError>
+    ) -> Result<(), BlockchainError>
     where
         NumberFor<Block>: finality_grandpa::BlockNumberOps,
     {
         if (self.commit.target_hash, self.commit.target_number) != finalized_target {
             let msg = "invalid commit target in grandpa justification".to_string();
-            Err(ClientError::BadJustification(msg))
+            Err(BlockchainError::BadJustification(msg))
         } else {
             self.verify(set_id, voters)
         }
     }
 
     /// Validate the commit and the votes' ancestry proofs.
-    pub fn verify(&self, set_id: u64, voters: &VoterSet<AuthorityId>) -> Result<(), ClientError>
+    pub fn verify(&self, set_id: u64, voters: &VoterSet<AuthorityId>) -> Result<(), BlockchainError>
     where
         NumberFor<Block>: finality_grandpa::BlockNumberOps,
     {
@@ -251,7 +253,7 @@ impl<Block: BlockT> GrandpaJustification<Block> {
             Ok(ref result) if result.ghost().is_some() => {}
             _ => {
                 let msg = "invalid commit in grandpa justification".to_string();
-                return Err(ClientError::BadJustification(msg));
+                return Err(BlockchainError::BadJustification(msg));
             }
         }
 
@@ -266,7 +268,7 @@ impl<Block: BlockT> GrandpaJustification<Block> {
                 set_id,
                 &mut buf,
             ) {
-                return Err(ClientError::BadJustification(
+                return Err(BlockchainError::BadJustification(
                     "invalid signature for precommit in grandpa justification".to_string(),
                 )
                 .into());
@@ -285,7 +287,7 @@ impl<Block: BlockT> GrandpaJustification<Block> {
                     }
                 }
                 _ => {
-                    return Err(ClientError::BadJustification(
+                    return Err(BlockchainError::BadJustification(
                         "invalid precommit ancestry proof in grandpa justification".to_string(),
                     )
                     .into());
@@ -300,7 +302,7 @@ impl<Block: BlockT> GrandpaJustification<Block> {
             .collect();
 
         if visited_hashes != ancestry_hashes {
-            return Err(ClientError::BadJustification(
+            return Err(BlockchainError::BadJustification(
                 "invalid precommit ancestries in grandpa justification with unused headers"
                     .to_string(),
             )
@@ -315,7 +317,7 @@ impl<Block: BlockT> ProvableJustification<Block> for GrandpaJustification<Block>
 where
     NumberFor<Block>: BlockNumberOps,
 {
-    fn verify(&self, set_id: u64, authorities: &[(AuthorityId, u64)]) -> ClientResult<()> {
+    fn verify(&self, set_id: u64, authorities: &[(AuthorityId, u64)]) -> BlockchainResult<()> {
         let voter_set = VoterSet::new(authorities.clone().to_owned().drain(..)).unwrap();
         GrandpaJustification::verify(self, set_id, &voter_set)
     }
@@ -325,7 +327,7 @@ where
         set_id: u64,
         finalized_target: (Block::Hash, NumberFor<Block>),
         authorities: &[(AuthorityId, u64)],
-    ) -> ClientResult<()> {
+    ) -> BlockchainResult<()> {
         let voter_set = VoterSet::new(authorities.clone().to_owned().drain(..)).unwrap();
         GrandpaJustification::verify_finalization(self, set_id, finalized_target, &voter_set)?;
         Ok(())

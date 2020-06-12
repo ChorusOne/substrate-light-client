@@ -1,13 +1,15 @@
-use crate::common::{
+use crate::common::traits::aux_store::AuxStore;
+use crate::common::traits::verifier::Verifier;
+use crate::common::types::block_import_params::BlockImportParams;
+use crate::common::types::block_origin::BlockOrigin;
+use crate::common::types::light_authority_set::LightAuthoritySet;
+use crate::common::types::next_change_in_authority::NextChangeInAuthority;
+use crate::common::utils::{
     delete_next_authority_change, fetch_light_authority_set, fetch_next_authority_change,
-    insert_light_authority_set, LightAuthoritySet, NextChangeInAuthority,
-    GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY,
+    insert_light_authority_set, GRANDPA_AUTHORITY_CHANGE_INTERMEDIATE_KEY,
 };
 use parity_scale_codec::alloc::borrow::Cow;
 use parity_scale_codec::alloc::sync::Arc;
-use sc_client_api::AuxStore;
-use sp_consensus::import_queue::Verifier;
-use sp_consensus::{BlockImportParams, BlockOrigin};
 use sp_finality_grandpa::{ConsensusLog, ScheduledChange, GRANDPA_ENGINE_ID};
 use sp_runtime::generic::OpaqueDigestItemId;
 use sp_runtime::traits::Header;
@@ -54,13 +56,7 @@ where
         header: <Block as BlockT>::Header,
         justification: Option<Vec<u8>>,
         body: Option<Vec<<Block as BlockT>::Extrinsic>>,
-    ) -> Result<
-        (
-            BlockImportParams<Block, ()>,
-            Option<Vec<([u8; 4], Vec<u8>)>>,
-        ),
-        String,
-    > {
+    ) -> Result<BlockImportParams<Block>, String> {
         let (possible_authority_change, scheduled_change_exists) = {
             let possible_authority_change =
                 fetch_next_authority_change::<AS, Block>(self.aux_store.clone())
@@ -95,7 +91,7 @@ where
                 None => Ok(None),
             }?;
 
-        let mut block_import_params: BlockImportParams<Block, ()> =
+        let mut block_import_params: BlockImportParams<Block> =
             BlockImportParams::new(BlockOrigin::NetworkBroadcast, header);
         block_import_params.justification = justification;
         if let Some(next_authority_change) = possible_next_authority_change {
@@ -121,6 +117,6 @@ where
                 .map_err(|e| format!("{}", e))?;
         }
 
-        Ok((block_import_params, None))
+        Ok(block_import_params)
     }
 }
