@@ -1,9 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::types::{H256, SignedBlock, BlockNumber};
-
-//use cosmwasm::types::HumanAddr;
+use crate::types::{H256, BlockNumber};
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {

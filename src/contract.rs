@@ -4,7 +4,7 @@ use crate::types::{ConsensusState, ClientState, SignedBlock};
 use sp_runtime::traits::{Header as HeaderT};
 use crate::common::types::light_authority_set::LightAuthoritySet;
 use parity_scale_codec::Decode;
-use sp_runtime::Justification;
+use sp_finality_grandpa::AuthorityList;
 
 use cosmwasm::errors::{contract_err, Result, dyn_contract_err};
 use cosmwasm::traits::{Api, Extern, ReadonlyStorage, Storage};
@@ -59,13 +59,15 @@ pub fn init<S: Storage, A: Api>(
         Err(_) => return dyn_contract_err("Unable to decode authority_set hex".to_string())
     };
 
-    let authset = match LightAuthoritySet::decode(&mut auth_bytes.as_slice()) {
+    let authset = match AuthorityList::decode(&mut auth_bytes.as_slice()) {
         Ok(authset) => authset,
-        Err(_) => return dyn_contract_err("LightAuthoritySet::decode()".to_string())
+        Err(_) => return dyn_contract_err("AuthorityList::decode()".to_string())
     };
     let head = block.block.header;
 
-    let state_bytes = match initialize_db(head.clone(), authset) {
+    let authority_set = LightAuthoritySet::new(0, authset);
+
+    let state_bytes = match initialize_db(head.clone(), authority_set) {
         Ok(state_bytes) => state_bytes,
         Err(_) => return dyn_contract_err("initialize_db()".to_string())
     };
@@ -135,7 +137,7 @@ fn try_block<S: Storage, A: Api>(
         1
     ) {
         Ok(result) => result,
-        Err(_) => return dyn_contract_err("ingest_finalized_header()".to_string())
+        Err(e) => return dyn_contract_err(e.to_string())
     };
 
     let new_client = ClientState {
