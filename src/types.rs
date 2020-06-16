@@ -1,12 +1,8 @@
-use sp_runtime::codec::{Decode, Encode};
-
 use sp_runtime::{
-    //generic,
     traits::BlakeTwo256,
     OpaqueExtrinsic, RuntimeDebug,
 };
 
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub type Header = sp_runtime::generic::Header<u32, BlakeTwo256>;
@@ -20,7 +16,7 @@ use sp_finality_grandpa::{AuthorityList, SetId};
 pub type BlockNumber = u32;
 pub type H256 = Vec<u8>;
 
-#[derive(Clone, Default, Encode, Decode, RuntimeDebug, Serialize, Deserialize)]
+#[derive(Clone, Default, RuntimeDebug, Serialize, Deserialize)]
 pub struct ClientState {
     pub name: String,
     pub height: BlockNumber,
@@ -30,7 +26,7 @@ pub struct ClientState {
     pub frozen_height: Option<BlockNumber>,
 }
 
-#[derive(Clone, Default, Encode, Decode, RuntimeDebug, Serialize, Deserialize)]
+#[derive(Clone, Default, RuntimeDebug, Serialize, Deserialize)]
 pub struct ConsensusState {
     pub set_id: Option<SetId>,
     pub authorities: Option<AuthorityList>,

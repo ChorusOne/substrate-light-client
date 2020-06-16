@@ -22,7 +22,7 @@ cosmwasm = "0.7.2"
 cw-storage = "0.2.0"
 schemars = "=0.5.0"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
-
+hex = "*"
 # Just to build on wasm
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 

@@ -2140,6 +2140,7 @@ dependencies = [
  "cw-storage",
  "ed25519-dalek",
  "finality-grandpa",
+ "hex 0.3.2",
  "kvdb",
  "parity-scale-codec",
  "parity-scale-codec-derive",

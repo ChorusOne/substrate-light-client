@@ -1,12 +1,12 @@
 use crate::msg::{LatestHeightResponse, HandleMsg, InitMsg, QueryMsg};
 use crate::{ingest_finalized_header, initialize_db};
-use crate::types::{ConsensusState, ClientState, Header, SignedBlock, Block};
-use sp_runtime::traits::{Header as HeaderT, Block as BlockT};
+use crate::types::{ConsensusState, ClientState, SignedBlock};
+use sp_runtime::traits::{Header as HeaderT};
 use crate::common::types::light_authority_set::LightAuthoritySet;
 use parity_scale_codec::Decode;
 use sp_runtime::Justification;
 
-use cosmwasm::errors::{contract_err, Result};
+use cosmwasm::errors::{contract_err, Result, dyn_contract_err};
 use cosmwasm::traits::{Api, Extern, ReadonlyStorage, Storage};
 use cosmwasm::types::{log, Env, Response};
 use cw_storage::{serialize, Singleton, ReadonlySingleton, singleton, singleton_read};
@@ -44,11 +44,32 @@ pub fn init<S: Storage, A: Api>(
         return contract_err("Name is not in the expected format (8-20 lowercase UTF-8 bytes)");
     }
 
-    let block = SignedBlock::decode(&mut msg.block.as_bytes()).ok().unwrap();
-    let authset = LightAuthoritySet::decode(&mut msg.authority_set.as_bytes()).ok().unwrap();
+    let block_bytes = match hex::decode(&msg.block[2..]) {
+        Ok(bytes) => bytes,
+        Err(_) => return dyn_contract_err("Unable to decode block hex".to_string())
+    };
+
+    let block = match SignedBlock::decode(&mut block_bytes.as_slice()) {
+        Ok(block) => block,
+        Err(_) => return dyn_contract_err("SignedBlock::decode()".to_string())
+    };
+
+    let auth_bytes = match hex::decode(&msg.authority_set[2..]) {
+        Ok(bytes) => bytes,
+        Err(_) => return dyn_contract_err("Unable to decode authority_set hex".to_string())
+    };
+
+    let authset = match LightAuthoritySet::decode(&mut auth_bytes.as_slice()) {
+        Ok(authset) => authset,
+        Err(_) => return dyn_contract_err("LightAuthoritySet::decode()".to_string())
+    };
     let head = block.block.header;
 
-    let state_bytes = initialize_db(head.clone(), authset).ok().unwrap();
+    let state_bytes = match initialize_db(head.clone(), authset) {
+        Ok(state_bytes) => state_bytes,
+        Err(_) => return dyn_contract_err("initialize_db()".to_string())
+    };
+
     let client = ClientState {
         name: msg.name,
         height: head.number.clone(),
@@ -95,17 +116,27 @@ fn try_block<S: Storage, A: Api>(
 ) -> Result<Response> {
 
     let client = client_state(&mut deps.storage).load()?;
+    let block_bytes = match hex::decode(&block[2..]) {
+        Ok(bytes) => bytes,
+        Err(_) => return dyn_contract_err("Unable to decode block hex".to_string())
+    };
 
-    let block = SignedBlock::decode(&mut block.as_bytes()).ok().unwrap();
+    let block = match SignedBlock::decode(&mut block_bytes.as_slice()) {
+        Ok(block) => block,
+        Err(_) => return dyn_contract_err("SignedBlock::decode()".to_string())
+    };
 
     let head = block.block.header.clone();
 
-    let (result, ibc_data) = ingest_finalized_header(
+    let (result, ibc_data) = match ingest_finalized_header(
         client.state,
         head.clone(),
         block.justification,
         1
-    ).unwrap();
+    ) {
+        Ok(result) => result,
+        Err(_) => return dyn_contract_err("ingest_finalized_header()".to_string())
+    };
 
     let new_client = ClientState {
         height: head.number.clone(),
