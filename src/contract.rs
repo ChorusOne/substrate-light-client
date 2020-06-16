@@ -1,6 +1,7 @@
 use crate::msg::{LatestHeightResponse, HandleMsg, InitMsg, QueryMsg};
 use crate::{ingest_finalized_header, initialize_db};
-use crate::types::{ConsensusState, ClientState ,JsonHeader, Header};
+use crate::types::{ConsensusState, ClientState, Header, SignedBlock, Block};
+use sp_runtime::traits::{Header as HeaderT, Block as BlockT};
 use crate::common::types::light_authority_set::LightAuthoritySet;
 use parity_scale_codec::Decode;
 use sp_runtime::Justification;
@@ -39,18 +40,20 @@ pub fn init<S: Storage, A: Api>(
 ) -> Result<Response> {
 
     // Check name, symbol, decimals
-    if !is_valid_name(&msg.name) {
-        return contract_err("Name is not in the expected format (3-30 UTF-8 bytes)");
+    if !is_valid_identifier(&msg.name) {
+        return contract_err("Name is not in the expected format (8-20 lowercase UTF-8 bytes)");
     }
 
-    let head = Header::decode(&mut msg.header.header.as_bytes()).ok().unwrap();
-    let authset = LightAuthoritySet::decode(&mut msg.header.authority_set.unwrap().as_bytes()).ok().unwrap();
-    let state_bytes = initialize_db(head, authset).ok().unwrap();
+    let block = SignedBlock::decode(&mut msg.block.as_bytes()).ok().unwrap();
+    let authset = LightAuthoritySet::decode(&mut msg.authority_set.as_bytes()).ok().unwrap();
+    let head = block.block.header;
+
+    let state_bytes = initialize_db(head.clone(), authset).ok().unwrap();
     let client = ClientState {
         name: msg.name,
-        height: msg.height,
-        hash: [0].to_vec(),
-        commitment_root: [0].to_vec(),
+        height: head.number.clone(),
+        hash: head.hash().clone().as_bytes().to_vec(),
+        commitment_root: head.state_root().as_bytes().to_vec(),
         frozen_height: None,
         state: state_bytes,
     };
@@ -66,7 +69,7 @@ pub fn handle<S: Storage, A: Api>(
     msg: HandleMsg,
 ) -> Result<Response> {
     match msg {
-        HandleMsg::UpdateClient { height, header } => try_block(deps, env, &height, &header),
+        HandleMsg::UpdateClient { block, authority_set } => try_block(deps, env, &block, &authority_set),
     }
 }
 
@@ -87,25 +90,27 @@ pub fn query<S: Storage, A: Api>(deps: &Extern<S, A>, msg: QueryMsg) -> Result<V
 fn try_block<S: Storage, A: Api>(
     deps: &mut Extern<S, A>,
     _env: Env,
-    height: &u32,
-    header: &JsonHeader,
+    block: &String,
+    _authority_set: &String,
 ) -> Result<Response> {
 
     let client = client_state(&mut deps.storage).load()?;
 
-    let head = Header::decode(&mut header.header.as_bytes()).ok().unwrap();
-    let justification = Justification::decode(&mut header.justification.as_ref().unwrap().as_bytes()).ok().unwrap();
+    let block = SignedBlock::decode(&mut block.as_bytes()).ok().unwrap();
+
+    let head = block.block.header.clone();
+
     let (result, ibc_data) = ingest_finalized_header(
         client.state,
-        head,
-        Some(justification),
+        head.clone(),
+        block.justification,
         1
     ).unwrap();
 
     let new_client = ClientState {
-        height: *height,
-        hash: header.block_hash.clone(),
-        commitment_root: header.commitment_root.clone(),
+        height: head.number.clone(),
+        hash: head.hash().as_bytes().to_vec(),
+        commitment_root: head.state_root().as_bytes().to_vec(),
         state: ibc_data,
         ..client
     };
@@ -116,7 +121,7 @@ fn try_block<S: Storage, A: Api>(
         messages: vec![],
         log: vec![
             log("action", "block"),
-            log("height", &height.to_string())
+            log("height", &head.number.to_string())
         ],
         data: None,
     };
@@ -124,19 +129,16 @@ fn try_block<S: Storage, A: Api>(
 }
 
 
-fn is_valid_name(name: &str) -> bool {
+fn is_valid_identifier(name: &str) -> bool {
     let bytes = name.as_bytes();
-    if bytes.len() < 3 || bytes.len() > 30 {
-        return false;
+    if bytes.len() < 8 || bytes.len() > 20 {
+        return false; // length invalid
+    }
+    for byte in bytes {
+        if byte > &122 || byte < &97 {
+            return false; // not lowercase ascii
+        }
     }
     return true;
 }
 
-fn is_valid_message(symbol: &str) -> bool {
-    let bytes = symbol.as_bytes();
-    if bytes.len() < 6 {
-        return false;
-    }
-
-    return true;
-}

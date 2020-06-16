@@ -13,6 +13,8 @@ pub type Header = sp_runtime::generic::Header<u32, BlakeTwo256>;
 
 pub type Block = sp_runtime::generic::Block<Header, OpaqueExtrinsic>;
 
+pub type SignedBlock = sp_runtime::generic::SignedBlock<Block>;
+
 use sp_finality_grandpa::{AuthorityList, SetId};
 
 pub type BlockNumber = u32;
@@ -35,14 +37,5 @@ pub struct ConsensusState {
     pub commitment_root: Option<H256>,
 }
 
-#[derive(Clone, PartialEq, Eq, Encode, Decode, Serialize, Debug, Deserialize, JsonSchema)]
-pub struct JsonHeader {
-    pub height: BlockNumber,
-    pub header: String,
-    pub block_hash: H256,
-    pub commitment_root: H256,
-    pub justification: Option<String>,
-    pub authority_set: Option<String>,
-    //pub authorities_proof: Option<Vec<Vec<u8>>>,
-}
+
 
