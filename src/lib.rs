@@ -35,11 +35,9 @@ use sp_runtime::Justification;
 pub mod contract;
 pub mod msg;
 
-#[cfg(test)]
-mod tests;
-
-// WASM entry point need to call this function
-pub fn initialize_db(
+/// Initializes the database with initial header
+/// and authority set
+fn initialize_db(
     initial_header: Header,
     initial_authority_set: LightAuthoritySet,
 ) -> Result<Vec<u8>, BlockchainError> {
@@ -61,7 +59,10 @@ pub fn initialize_db(
     Ok(data.encode())
 }
 
-pub fn current_status<Block>(encoded_data: Vec<u8>) -> Result<ClientStatus<Block>, BlockchainError>
+/// Gives current status of database passed which includes
+/// current best header, finalized header, light authority set
+/// as well as next authority set change scheduled.
+fn current_status<Block>(encoded_data: Vec<u8>) -> Result<ClientStatus<Block>, BlockchainError>
 where
     Block: BlockT,
 {
@@ -86,8 +87,11 @@ where
     })
 }
 
-// WASM entry point need to call this function
-pub fn ingest_finalized_header(
+/// Ingests finalized header and optionally a justification
+/// Until justification is not provided block won't be marked as
+/// finalized. And if there are already `max_non_finalized_blocks`
+/// in db, it won't accept another header.
+fn ingest_finalized_header(
     encoded_data: Vec<u8>,
     finalized_header: Header,
     justification: Option<Justification>,
@@ -858,8 +862,6 @@ mod tests {
         write_test_flow(format!("third, fourth and fifth headers are now finalized"));
     }
 }
-
-
 
 /** Below we expose wasm exports **/
 #[cfg(target_arch = "wasm32")]

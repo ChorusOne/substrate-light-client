@@ -1,7 +1,4 @@
-use sp_runtime::{
-    traits::BlakeTwo256,
-    OpaqueExtrinsic, RuntimeDebug,
-};
+use sp_runtime::{traits::BlakeTwo256, OpaqueExtrinsic, RuntimeDebug};
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +29,3 @@ pub struct ConsensusState {
     pub authorities: Option<AuthorityList>,
     pub commitment_root: Option<H256>,
 }
-
-
-

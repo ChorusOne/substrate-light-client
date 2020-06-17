@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::types::{H256, BlockNumber};
+use crate::types::{BlockNumber, H256};
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
@@ -16,13 +16,13 @@ pub enum HandleMsg {
     UpdateClient {
         block: String,
         authority_set: String,
-    }
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum QueryMsg {
-    LatestHeight { }
+    LatestHeight {},
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]

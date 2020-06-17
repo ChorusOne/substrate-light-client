@@ -1,4 +1,3 @@
-
 use crate::common::types::block_import_params::BlockImportParams;
 use crate::common::types::block_origin::BlockOrigin;
 use sp_runtime::traits::Block as BlockT;
