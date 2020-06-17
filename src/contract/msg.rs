@@ -15,7 +15,7 @@ pub struct InitMsg {
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum HandleMsg {
-    IngestBlock {
+    UpdateClient {
         block: String,
         authority_set: String,
     },

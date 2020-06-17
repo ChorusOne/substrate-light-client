@@ -94,7 +94,7 @@ pub(crate) fn handle<S: Storage, A: Api>(
     msg: HandleMsg,
 ) -> Result<Response> {
     match msg {
-        HandleMsg::IngestBlock {
+        HandleMsg::UpdateClient {
             block,
             authority_set,
         } => try_block(deps, env, &block, &authority_set),
@@ -256,7 +256,7 @@ mod tests {
         assert_eq!(query_response.best_header_hash, init_header_hash);
         assert_eq!(query_response.best_header_height, init_header_number);
 
-        let update_msg = HandleMsg::IngestBlock {
+        let update_msg = HandleMsg::UpdateClient {
             block: "0xf157283bcfe5ace5f3258bdb595ee8c6761394a56c8e73b6aaf734e6fb1e7c92426203000ad92ba15285e38e29472d35c29a8e0097e0748fa66fca1b4c834e13f0604de6f7e776ac0632a86d967e1fc4694d51b15c06dadf6c2d0f60a0c661993ffa6d5308066175726120458dd10f00000000056175726101019c9a0a6afd95ff9b8a479bab6676867d19f388b187534394661f0b9ca540b86cd5847174d8b1075f61c01f3b0f5dfa8c643b15c226ebace6aa5aca43cd12ce8504280402000b30015fbf720100".to_string(),
             authority_set: "0x0488dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee0100000000000000".to_string(),
         };
