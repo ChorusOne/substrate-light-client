@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::contract::types::H256;
+use crate::contract::state::H256;
 use crate::types::BlockNumber;
 
 #[derive(Serialize, Deserialize, JsonSchema)]

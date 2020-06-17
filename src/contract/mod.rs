@@ -1,5 +1,5 @@
 pub mod msg;
-mod types;
+mod state;
 
 use cosmwasm::errors::{contract_err, dyn_contract_err, Result};
 use cosmwasm::traits::{Api, Extern, ReadonlyStorage, Storage};
@@ -10,7 +10,7 @@ use sp_finality_grandpa::AuthorityList;
 use sp_runtime::traits::Header as HeaderT;
 
 use crate::common::types::light_authority_set::LightAuthoritySet;
-use crate::contract::types::{ConsensusState, ContractState, H256};
+use crate::contract::state::{ConsensusState, ContractState, H256};
 use crate::light_state::{current_status, ingest_finalized_header, initialize_state};
 use crate::msg::{HandleMsg, InitMsg, LatestHeightResponse, QueryMsg};
 use crate::types::{Block, SignedBlock};
@@ -107,7 +107,7 @@ pub(crate) fn query<S: Storage, A: Api>(deps: &Extern<S, A>, msg: QueryMsg) -> R
             let state = read_only_contract_state(&deps.storage).load()?;
 
             let out = serialize(&LatestHeightResponse {
-                best_header_height: state.height,
+                best_header_height: state.best_header_height,
                 best_header_hash: state.best_header_hash,
                 last_finalized_header_hash: state.last_finalized_header_hash,
             })?;
@@ -151,7 +151,10 @@ fn try_block<S: Storage, A: Api>(
         messages: vec![],
         log: vec![
             log("action", "block"),
-            log("height", new_contract_state.height.to_string().as_ref()),
+            log(
+                "height",
+                new_contract_state.best_header_height.to_string().as_ref(),
+            ),
         ],
         data: None,
     };
@@ -185,7 +188,7 @@ fn update_contract_state(
         .map_or(H256::default(), |h| h.hash().as_bytes().to_vec());
 
     Ok(ContractState {
-        height: best_header_number,
+        best_header_height: best_header_number,
         best_header_hash,
         last_finalized_header_hash,
         best_header_commitment_root,
@@ -209,11 +212,13 @@ fn is_valid_identifier(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::contract::{handle, init, read_only_contract_state};
+    use crate::contract::msg::{LatestHeightResponse, QueryMsg};
+    use crate::contract::{handle, init, query, read_only_contract_state};
     use crate::msg::{HandleMsg, InitMsg};
     use cosmwasm::mock::{MockApi, MockStorage};
     use cosmwasm::traits::Extern;
     use cosmwasm::types::Env;
+    use cw_storage::deserialize;
 
     #[test]
     fn test_contract_init_and_update() {
@@ -230,6 +235,7 @@ mod tests {
         let init_header_hash =
             hex::decode("f157283bcfe5ace5f3258bdb595ee8c6761394a56c8e73b6aaf734e6fb1e7c92")
                 .expect("Hex decoding of init header hash failed");
+        let init_header_number: u32 = 55439;
         let result = init(&mut extern_dep, Env::default(), init_msg);
         assert!(result.is_ok());
 
@@ -240,6 +246,15 @@ mod tests {
         assert!(contract_state.light_client_data.len() > 0);
         assert_eq!(contract_state.last_finalized_header_hash.len(), 0);
         assert_eq!(contract_state.best_header_hash, init_header_hash);
+        assert_eq!(contract_state.best_header_height, init_header_number);
+
+        let result = query(&extern_dep, QueryMsg::LatestHeight {});
+        assert!(result.is_ok());
+        let query_response: LatestHeightResponse =
+            deserialize(result.unwrap().as_slice()).expect("Deserializing Query response failed");
+        assert_eq!(query_response.last_finalized_header_hash.len(), 0);
+        assert_eq!(query_response.best_header_hash, init_header_hash);
+        assert_eq!(query_response.best_header_height, init_header_number);
 
         let update_msg = HandleMsg::IngestBlock {
             block: "0xf157283bcfe5ace5f3258bdb595ee8c6761394a56c8e73b6aaf734e6fb1e7c92426203000ad92ba15285e38e29472d35c29a8e0097e0748fa66fca1b4c834e13f0604de6f7e776ac0632a86d967e1fc4694d51b15c06dadf6c2d0f60a0c661993ffa6d5308066175726120458dd10f00000000056175726101019c9a0a6afd95ff9b8a479bab6676867d19f388b187534394661f0b9ca540b86cd5847174d8b1075f61c01f3b0f5dfa8c643b15c226ebace6aa5aca43cd12ce8504280402000b30015fbf720100".to_string(),
@@ -248,6 +263,7 @@ mod tests {
         let next_header_hash =
             hex::decode("b17ad1a298edb7fa902ce240358ced980a1a1f9febe163152be5e66c377fa38c")
                 .expect("Hex decoding of next header hash failed");
+        let next_header_number = init_header_number + 1;
         let result = handle(&mut extern_dep, Env::default(), update_msg);
         assert!(result.is_ok());
 
@@ -258,5 +274,13 @@ mod tests {
         assert!(contract_state.light_client_data.len() > 0);
         assert_eq!(contract_state.last_finalized_header_hash.len(), 0);
         assert_eq!(contract_state.best_header_hash, next_header_hash);
+
+        let result = query(&extern_dep, QueryMsg::LatestHeight {});
+        assert!(result.is_ok());
+        let query_response: LatestHeightResponse =
+            deserialize(result.unwrap().as_slice()).expect("Deserializing Query response failed");
+        assert_eq!(query_response.last_finalized_header_hash.len(), 0);
+        assert_eq!(query_response.best_header_hash, next_header_hash);
+        assert_eq!(query_response.best_header_height, next_header_number);
     }
 }

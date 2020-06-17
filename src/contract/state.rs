@@ -10,7 +10,7 @@ pub type H256 = Vec<u8>;
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct ContractState {
     pub name: String,
-    pub height: BlockNumber,
+    pub best_header_height: BlockNumber,
     pub best_header_hash: H256,
     pub last_finalized_header_hash: H256,
     pub best_header_commitment_root: H256,
