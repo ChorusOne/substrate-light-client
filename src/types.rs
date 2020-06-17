@@ -1,14 +1,12 @@
-use sp_runtime::{traits::BlakeTwo256, OpaqueExtrinsic, RuntimeDebug};
-
 use serde::{Deserialize, Serialize};
+use sp_finality_grandpa::{AuthorityList, SetId};
+use sp_runtime::{traits::BlakeTwo256, OpaqueExtrinsic, RuntimeDebug};
 
 pub type Header = sp_runtime::generic::Header<u32, BlakeTwo256>;
 
 pub type Block = sp_runtime::generic::Block<Header, OpaqueExtrinsic>;
 
 pub type SignedBlock = sp_runtime::generic::SignedBlock<Block>;
-
-use sp_finality_grandpa::{AuthorityList, SetId};
 
 pub type BlockNumber = u32;
 pub type H256 = Vec<u8>;

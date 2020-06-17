@@ -1,15 +1,15 @@
-use crate::common::types::light_authority_set::LightAuthoritySet;
-use crate::msg::{HandleMsg, InitMsg, LatestHeightResponse, QueryMsg};
-use crate::types::{ClientState, ConsensusState, SignedBlock};
-use crate::{ingest_finalized_header, initialize_db};
-use parity_scale_codec::Decode;
-use sp_finality_grandpa::AuthorityList;
-use sp_runtime::traits::Header as HeaderT;
-
 use cosmwasm::errors::{contract_err, dyn_contract_err, Result};
 use cosmwasm::traits::{Api, Extern, ReadonlyStorage, Storage};
 use cosmwasm::types::{log, Env, Response};
 use cw_storage::{serialize, singleton, singleton_read, ReadonlySingleton, Singleton};
+use parity_scale_codec::Decode;
+use sp_finality_grandpa::AuthorityList;
+use sp_runtime::traits::Header as HeaderT;
+
+use crate::common::types::light_authority_set::LightAuthoritySet;
+use crate::msg::{HandleMsg, InitMsg, LatestHeightResponse, QueryMsg};
+use crate::types::{ClientState, ConsensusState, SignedBlock};
+use crate::{ingest_finalized_header, initialize_db};
 
 pub const PREFIX_CONFIG: &[u8] = b"config";
 pub const PREFIX_MESSAGES: &[u8] = b"messages";
