@@ -29,6 +29,7 @@ pub enum QueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct LatestHeightResponse {
-    pub height: BlockNumber,
-    pub hash: H256,
+    pub best_header_height: BlockNumber,
+    pub best_header_hash: H256,
+    pub last_finalized_header_hash: H256,
 }

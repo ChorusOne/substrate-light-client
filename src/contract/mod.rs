@@ -107,8 +107,9 @@ pub(crate) fn query<S: Storage, A: Api>(deps: &Extern<S, A>, msg: QueryMsg) -> R
             let state = read_only_contract_state(&deps.storage).load()?;
 
             let out = serialize(&LatestHeightResponse {
-                height: state.height,
-                hash: state.best_header_hash,
+                best_header_height: state.height,
+                best_header_hash: state.best_header_hash,
+                last_finalized_header_hash: state.last_finalized_header_hash,
             })?;
             Ok(out)
         }
