@@ -1,19 +1,21 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::types::{BlockNumber, H256};
+use crate::contract::types::H256;
+use crate::types::BlockNumber;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
     pub name: String,
     pub block: String,
     pub authority_set: String,
+    pub max_non_finalized_blocks_allowed: u64,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum HandleMsg {
-    UpdateClient {
+    IngestBlock {
         block: String,
         authority_set: String,
     },
