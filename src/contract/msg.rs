@@ -32,4 +32,6 @@ pub struct LatestHeightResponse {
     pub best_header_height: BlockNumber,
     pub best_header_hash: H256,
     pub last_finalized_header_hash: H256,
+    pub best_header_commitment_root: H256,
+    pub current_authority_set: String,
 }

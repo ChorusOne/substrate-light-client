@@ -1,8 +1,9 @@
 use parity_scale_codec::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 use sp_finality_grandpa::AuthorityList;
 
 /// Latest authority set tracker.
-#[derive(Debug, Encode, Decode, Clone)]
+#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize, Default)]
 pub struct LightAuthoritySet {
     set_id: u64,
     authorities: AuthorityList,

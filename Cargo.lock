@@ -257,10 +257,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8709ce7dabeac33f4132cab84fda3796ac484d82c91ff5ccfb4ed61227af4bb5"
 dependencies = [
  "base64",
- "schemars",
+ "schemars 0.5.0",
  "serde",
- "serde-json-wasm",
- "snafu",
+ "serde-json-wasm 0.1.3",
+ "snafu 0.5.0",
+]
+
+[[package]]
+name = "cosmwasm-std"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a324f3f8bad0f6d4c1f2912f19466c7d53569fcc496a3dd1de80351b128b914d"
+dependencies = [
+ "base64",
+ "schemars 0.7.6",
+ "serde",
+ "serde-json-wasm 0.2.1",
+ "snafu 0.6.8",
+]
+
+[[package]]
+name = "cosmwasm-storage"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ad2178f2b221752ab79ac87e2044e00ab5624068d0929fb78e84389ced93a3f"
+dependencies = [
+ "cosmwasm-std",
+ "serde",
 ]
 
 [[package]]
@@ -274,11 +297,11 @@ dependencies = [
  "lru 0.3.1",
  "memmap",
  "parity-wasm",
- "schemars",
+ "schemars 0.5.0",
  "serde",
- "serde-json-wasm",
+ "serde-json-wasm 0.1.3",
  "sha2",
- "snafu",
+ "snafu 0.5.0",
  "wasmer-clif-backend",
  "wasmer-middleware-common",
  "wasmer-runtime-core",
@@ -419,18 +442,6 @@ dependencies = [
  "rand_core",
  "subtle 2.2.3",
  "zeroize",
-]
-
-[[package]]
-name = "cw-storage"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ccb825baeb07ef429c0f2e71e4b4d1abacd693b6b7c4b06035f4ef294961aed"
-dependencies = [
- "cosmwasm",
- "schemars",
- "serde",
- "snafu",
 ]
 
 [[package]]
@@ -1570,7 +1581,18 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2cbd5c0d1f2de018981605754815f6b4fd750d858e861c39875838ec98a86cd1"
 dependencies = [
- "schemars_derive",
+ "schemars_derive 0.5.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be77ed66abed6954aabf6a3e31a84706bedbf93750d267e92ef4a6d90bbd6a61"
+dependencies = [
+ "schemars_derive 0.7.6",
  "serde",
  "serde_json",
 ]
@@ -1580,6 +1602,18 @@ name = "schemars_derive"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73ab7f0b9b64633747a68dce4ed6318bbf30e3befe67df7624ad83abb7295c09"
+dependencies = [
+ "proc-macro2 1.0.18",
+ "quote 1.0.7",
+ "serde_derive_internals",
+ "syn 1.0.31",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11af7a475c9ee266cfaa9e303a47c830ebe072bf3101ab907a7b7b9d816fa01d"
 dependencies = [
  "proc-macro2 1.0.18",
  "quote 1.0.7",
@@ -1650,6 +1684,15 @@ name = "serde-json-wasm"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77cf509484e297252a195b1338a6d45843fe11ef234259f67649e8729934f443"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "serde-json-wasm"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7294d94d390f1d2334697c065ea591d7074c676e2d20aa6f1df752fced29823f"
 dependencies = [
  "serde",
 ]
@@ -1737,7 +1780,18 @@ checksum = "9d0bf93d08d6a44363b47d737f1f5bebbf5e6a1eaaa3d4c128ceeaca6b718292"
 dependencies = [
  "backtrace",
  "doc-comment",
- "snafu-derive",
+ "snafu-derive 0.5.0",
+]
+
+[[package]]
+name = "snafu"
+version = "0.6.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7f5aed652511f5c9123cf2afbe9c244c29db6effa2abb05c866e965c82405ce"
+dependencies = [
+ "backtrace",
+ "doc-comment",
+ "snafu-derive 0.6.8",
 ]
 
 [[package]]
@@ -1749,6 +1803,17 @@ dependencies = [
  "proc-macro2 0.4.30",
  "quote 0.6.13",
  "syn 0.15.44",
+]
+
+[[package]]
+name = "snafu-derive"
+version = "0.6.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebf8f7d5720104a9df0f7076a8682024e958bba0fe9848767bb44f251f3648e9"
+dependencies = [
+ "proc-macro2 1.0.18",
+ "quote 1.0.7",
+ "syn 1.0.31",
 ]
 
 [[package]]
@@ -2135,19 +2200,19 @@ name = "substrate_client"
 version = "0.1.1"
 dependencies = [
  "clear_on_drop",
- "cosmwasm",
+ "cosmwasm-std",
+ "cosmwasm-storage",
  "cosmwasm-vm",
- "cw-storage",
  "ed25519-dalek",
  "finality-grandpa",
- "hex 0.3.2",
+ "hex 0.4.2",
  "kvdb",
  "parity-scale-codec",
  "parity-scale-codec-derive",
  "parity-util-mem",
  "parking_lot 0.10.2",
  "rand",
- "schemars",
+ "schemars 0.7.6",
  "serde",
  "sp-api",
  "sp-application-crypto",
