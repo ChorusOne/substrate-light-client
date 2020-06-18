@@ -93,7 +93,7 @@ pub(crate) fn init<S: Storage, A: Api, Q: Querier>(
     };
     let head = block.block.header;
 
-    let authority_set = LightAuthoritySet::new(0, authset);
+    let authority_set = LightAuthoritySet::new(msg.set_id, authset);
 
     let light_client_data = match initialize_state(head.clone(), authority_set) {
         Ok(state_bytes) => state_bytes,
@@ -279,13 +279,14 @@ mod tests {
             name: "testtesttest".into(),
             block: "0x5e9fc49076803d0ba88c719252ede5ae713d09367162d344e9b79ef3aac2efa03e620300fe518cc595e8f5ede8010cf6d26352f6a089ee52f992153a540c7b5d9b659ea272c9c1e535cf5ca49ab2d72059671d80f69c6dba7e6c0dca1e27c3832e873f2b08066175726120448dd10f0000000005617572610101fe734978fa3cb9804346988424124add53316e68e9dcd96a5dfc5a576fe61262031463e0e3a1cdb15538a763dddfbbdf2d3c47e3ecc72deebb3ba5ec59b1168204280402000bc0e95ebf720100".into(),
             authority_set: "0x0488dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee0100000000000000".to_string(),
-            max_non_finalized_blocks_allowed: 256
+            max_non_finalized_blocks_allowed: 256,
+            set_id: 1
         };
         let init_header_hash =
             hex::decode("f157283bcfe5ace5f3258bdb595ee8c6761394a56c8e73b6aaf734e6fb1e7c92")
                 .expect("Hex decoding of init header hash failed");
         let init_header_number: u32 = 55439;
-        let init_authority_set = "LightAuthoritySet { set_id: 0, authorities: [(Public(88dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee (5FA9nQDV...)), 1)] }";
+        let init_authority_set = "LightAuthoritySet { set_id: 1, authorities: [(Public(88dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee (5FA9nQDV...)), 1)] }";
         let result = init(&mut extern_dep, Env::default(), init_msg);
         assert!(result.is_ok());
 
