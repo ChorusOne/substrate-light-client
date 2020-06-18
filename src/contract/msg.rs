@@ -8,6 +8,7 @@ use crate::types::BlockNumber;
 pub struct InitMsg {
     pub name: String,
     pub block: String,
+    pub set_id: u64,
     pub authority_set: String,
     pub max_non_finalized_blocks_allowed: u64,
 }
