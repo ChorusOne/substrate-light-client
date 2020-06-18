@@ -1,13 +1,15 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::types::{BlockNumber, H256};
+use crate::contract::state::H256;
+use crate::types::BlockNumber;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
     pub name: String,
     pub block: String,
     pub authority_set: String,
+    pub max_non_finalized_blocks_allowed: u64,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
@@ -27,6 +29,9 @@ pub enum QueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct LatestHeightResponse {
-    pub height: BlockNumber,
-    pub hash: H256,
+    pub best_header_height: BlockNumber,
+    pub best_header_hash: H256,
+    pub last_finalized_header_hash: H256,
+    pub best_header_commitment_root: H256,
+    pub current_authority_set: String,
 }

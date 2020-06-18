@@ -18,9 +18,9 @@ parking_lot = "0.10.2"
 sp-api = "2.0.0-rc3"
 sp-core = "2.0.0-rc3"
 sp-finality-grandpa = "2.0.0-rc3"
-cosmwasm = "0.7.2"
-cw-storage = "0.2.0"
-schemars = "=0.5.0"
+cosmwasm-std = "0.8.1"
+cosmwasm-storage = "0.8.1"
+schemars = "0.7.6"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 hex = "*"
 # Just to build on wasm
@@ -44,7 +44,7 @@ overflow-checks = true
 default = ["cranelift"]
 # for quicker tests, cargo test --lib
 # for more explicit tests, cargo test --features=backtraces
-backtraces = ["cosmwasm/backtraces", "cosmwasm-vm/backtraces"]
+backtraces = ["cosmwasm-std/backtraces", "cosmwasm-vm/backtraces"]
 cranelift = ["cosmwasm-vm/default-cranelift"]
 singlepass = ["cosmwasm-vm/default-singlepass"]
 
