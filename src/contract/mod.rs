@@ -95,7 +95,11 @@ pub(crate) fn init<S: Storage, A: Api, Q: Querier>(
 
     let authority_set = LightAuthoritySet::new(msg.set_id, authset);
 
-    let light_client_data = match initialize_state(head.clone(), authority_set) {
+    let light_client_data = match initialize_state(
+        head.clone(),
+        authority_set,
+        msg.max_headers_allowed_to_store,
+    ) {
         Ok(state_bytes) => state_bytes,
         Err(e) => {
             return Err(StdError::GenericErr {
@@ -108,7 +112,7 @@ pub(crate) fn init<S: Storage, A: Api, Q: Querier>(
     let new_contract_state = ContractState {
         name: msg.name,
         light_client_data,
-        max_non_finalized_blocks_allowed: msg.max_non_finalized_blocks_allowed,
+        max_non_finalized_blocks_allowed: msg.max_headers_allowed_to_store,
     };
 
     contract_state(&mut deps.storage).save(&new_contract_state)?;
@@ -279,7 +283,7 @@ mod tests {
             name: "testtesttest".into(),
             block: "0x5e9fc49076803d0ba88c719252ede5ae713d09367162d344e9b79ef3aac2efa03e620300fe518cc595e8f5ede8010cf6d26352f6a089ee52f992153a540c7b5d9b659ea272c9c1e535cf5ca49ab2d72059671d80f69c6dba7e6c0dca1e27c3832e873f2b08066175726120448dd10f0000000005617572610101fe734978fa3cb9804346988424124add53316e68e9dcd96a5dfc5a576fe61262031463e0e3a1cdb15538a763dddfbbdf2d3c47e3ecc72deebb3ba5ec59b1168204280402000bc0e95ebf720100".into(),
             authority_set: "0x0488dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee0100000000000000".to_string(),
-            max_non_finalized_blocks_allowed: 256,
+            max_headers_allowed_to_store: 256,
             set_id: 1
         };
         let init_header_hash =

@@ -15,12 +15,7 @@ pub trait Storage<Block: BlockT>:
     ///
     /// Takes new authorities, the leaf state of the new block, and
     /// any auxiliary storage updates to place in the same operation.
-    fn import_header(
-        &self,
-        header: Block::Header,
-        state: NewBlockState,
-        aux_ops: Vec<(Vec<u8>, Option<Vec<u8>>)>,
-    ) -> BlockchainResult<()>;
+    fn import_header(&self, header: Block::Header, state: NewBlockState) -> BlockchainResult<()>;
 
     /// Set an existing block as new best block.
     fn set_head(&self, block: BlockId<Block>) -> BlockchainResult<()>;

@@ -39,8 +39,10 @@ where
     pub finalized_number: N,
     /// Hash of the genesis block.
     pub genesis_hash: H,
-    /// Non finalized blocks at the moment
-    pub non_finalized_blocks: u64,
+    /// headers stored at the moment
+    pub total_stored: u64,
+    /// Oldest stored header's corresponding block hash
+    pub oldest_stored_hash: H,
 }
 
 fn db_err(err: io::Error) -> BlockchainError {
@@ -53,14 +55,20 @@ fn codec_error(err: parity_scale_codec::Error) -> BlockchainError {
 
 pub struct Storage {
     data: Data,
-    max_non_finalized_blocks_allowed: u64,
+    max_headers_allowed_to_store: u64,
 }
 
 impl Storage {
-    pub fn new(data: Data, max_non_finalized_blocks_allowed: u64) -> Self {
-        Self {
-            data,
-            max_non_finalized_blocks_allowed,
+    pub fn new(data: Data, max_headers_allowed_to_store: u64) -> Result<Self, BlockchainError> {
+        if max_headers_allowed_to_store < 2 {
+            Err(BlockchainError::Backend(
+                "Maximum amount of blocks allowed to store need to be at least 2".into(),
+            ))
+        } else {
+            Ok(Self {
+                data,
+                max_headers_allowed_to_store,
+            })
         }
     }
 
@@ -282,12 +290,7 @@ where
     ///
     /// Takes new authorities, the leaf state of the new block, and
     /// any auxiliary storage updates to place in the same operation.
-    fn import_header(
-        &self,
-        header: Block::Header,
-        state: NewBlockState,
-        aux_ops: Vec<(Vec<u8>, Option<Vec<u8>>)>,
-    ) -> BlockchainResult<()> {
+    fn import_header(&self, header: Block::Header, state: NewBlockState) -> BlockchainResult<()> {
         assert!(
             state.is_best(),
             "Since, we are only following one fork block state must need to be best"
@@ -301,16 +304,49 @@ where
                 finalized_hash: Default::default(),
                 finalized_number: Zero::zero(),
                 genesis_hash: Default::default(),
-                non_finalized_blocks: 0,
+                total_stored: 0,
+                oldest_stored_hash: Default::default(),
             }
         } else {
             possible_meta.unwrap()
         };
 
-        if meta.non_finalized_blocks >= self.max_non_finalized_blocks_allowed {
-            return Err(BlockchainError::Backend(format!(
-                "Cannot import any more blocks, before finalizing previous blocks"
-            )));
+        let mut tx = self.data.db.transaction();
+
+        // We need to go down this in-efficient route, because
+        // to have a double linked list of headers require more storage and
+        // memory which we don't have.
+        // So, we need to backtrack every time we are above the limit.
+        if meta.total_stored >= self.max_headers_allowed_to_store {
+            let mut current_hash = meta.best_hash;
+            let amount_of_headers_to_backtrack = self.max_headers_allowed_to_store - 1;
+            let amount_of_headers_to_delete =
+                (meta.total_stored - self.max_headers_allowed_to_store) + 1;
+            // First backtrack to the newest header we need to delete
+            for _ in 0..amount_of_headers_to_backtrack {
+                let possible_header = self.header(BlockId::<Block>::Hash(current_hash))?;
+                if possible_header.is_none() {
+                    return Err(BlockchainError::Backend(format!(
+                        "FATAL: Storage inconsistency. Unable to retrieve stored block"
+                    )));
+                }
+                let header = possible_header.unwrap();
+                meta.oldest_stored_hash = current_hash;
+                current_hash = *header.parent_hash();
+            }
+            // Now, Let's delete newest header and all headers older than newest header
+            for _ in 0..amount_of_headers_to_delete {
+                let possible_header = self.header(BlockId::<Block>::Hash(current_hash))?;
+                if possible_header.is_none() {
+                    return Err(BlockchainError::Backend(format!(
+                        "FATAL: Storage inconsistency. Unable to retrieve stored block"
+                    )));
+                }
+                Self::tx_delete_header::<Block>(&mut tx, &current_hash);
+                meta.total_stored -= 1;
+                let header = possible_header.unwrap();
+                current_hash = *header.parent_hash();
+            }
         }
 
         let possible_header = self.header(BlockId::<Block>::Hash(header.hash()))?;
@@ -344,13 +380,13 @@ where
             }
         } else {
             meta.genesis_hash = header.hash();
+            meta.oldest_stored_hash = header.hash();
         }
 
-        meta.non_finalized_blocks += 1;
+        meta.total_stored += 1;
         meta.best_hash = header.hash();
         meta.best_number = *header.number();
 
-        let mut tx = self.data.db.transaction();
         Self::tx_store_meta(&mut tx, &meta);
         Self::tx_store_header::<Block>(&mut tx, &header);
         self.data.db.write(tx).map_err(db_err)
@@ -388,7 +424,7 @@ where
             return Err(BlockchainError::NonSequentialFinalization(format!("Error: {}", "to be finalized block need to be child of last finalized block or first block itself")));
         }
 
-        meta.non_finalized_blocks -= 1;
+        meta.total_stored -= 1;
         meta.finalized_hash = to_be_finalized_header.hash();
         meta.finalized_number = *to_be_finalized_header.number();
 
@@ -435,16 +471,240 @@ where
             Ok(CachedHeaderMetadata::from(&header))
         }
     }
+}
 
-    fn insert_header_metadata(
-        &self,
-        hash: Block::Hash,
-        header_metadata: CachedHeaderMetadata<Block>,
-    ) {
-        unimplemented!()
+#[cfg(test)]
+mod tests {
+    use crate::common::traits::header_backend::HeaderBackend;
+    use crate::common::traits::storage::Storage as StorageT;
+    use crate::common::types::blockchain_error::BlockchainError;
+    use crate::common::types::new_block_state::NewBlockState;
+    use crate::db::{create, Data};
+    use crate::genesis::GenesisData;
+    use crate::storage::Storage;
+    use crate::types::{Block, Header};
+    use parity_scale_codec::Encode;
+    use sp_api::BlockId;
+    use sp_runtime::traits::{
+        BlakeTwo256, Block as BlockT, HashFor, Header as HeaderT, NumberFor, One,
+    };
+
+    fn create_next_header(header: Header) -> Header {
+        let mut next_header = header.clone();
+        next_header.number += 1;
+        next_header.parent_hash = header.hash();
+        next_header
     }
 
-    fn remove_header_metadata(&self, hash: Block::Hash) {
-        unimplemented!()
+    #[test]
+    fn test_storage_init() {
+        let data = Data {
+            db: create(11),
+            genesis_data: GenesisData {},
+        };
+
+        let result = Storage::new(data.clone(), 2);
+        assert!(result.is_ok());
+
+        let result = Storage::new(data.clone(), 1);
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "Backend error: Maximum amount of blocks allowed to store need to be at least 2"
+        );
+
+        let result = Storage::new(data.clone(), 0);
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "Backend error: Maximum amount of blocks allowed to store need to be at least 2"
+        );
+    }
+
+    #[test]
+    fn test_storage_space_management() {
+        let data = Data {
+            db: create(11),
+            genesis_data: GenesisData {},
+        };
+
+        let mut produced_headers = vec![];
+        let max_headers_allowed_to_store = 7;
+
+        let result = Storage::new(data.clone(), max_headers_allowed_to_store);
+        assert!(result.is_ok());
+        let storage = result.unwrap();
+
+        let mut current_header = Header::new(
+            One::one(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+
+        // Initially meta structure should not exists
+        let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+
+        // Let's store first max_headers_allowed_to_store number of headers
+        for i in 0..max_headers_allowed_to_store {
+            current_header = create_next_header(current_header.clone());
+            produced_headers.push(current_header.clone());
+            assert!(StorageT::<Block>::import_header(
+                &storage,
+                current_header.clone(),
+                NewBlockState::Best
+            )
+            .is_ok());
+
+            // Check if meta is updated correctly.
+            let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
+            assert!(result.is_ok());
+            let result = result.unwrap();
+            assert!(result.is_some());
+            let meta = result.unwrap();
+            assert_eq!(meta.total_stored, i + 1);
+            assert_eq!(meta.oldest_stored_hash, produced_headers[0].hash());
+        }
+
+        let current_size = data.encode().len();
+        // Due to underlying DB's design there is slight drift equivalent
+        // to amount of headers we are allowed to store.
+        let size_drift_allowed = max_headers_allowed_to_store as usize;
+
+        // Adding more header should not increase the size, as we have stored max headers
+        for i in max_headers_allowed_to_store
+            ..((max_headers_allowed_to_store * 200) + (max_headers_allowed_to_store - 2) + 1)
+        {
+            current_header = create_next_header(current_header.clone());
+            produced_headers.push(current_header.clone());
+
+            assert!(StorageT::<Block>::import_header(
+                &storage,
+                current_header.clone(),
+                NewBlockState::Best
+            )
+            .is_ok());
+            assert!(data.encode().len() <= current_size + size_drift_allowed);
+
+            let last_header_to_be_deleted = i - max_headers_allowed_to_store;
+
+            // Headers at less than or equal to last_header_to_be_deleted won't
+            // exists in DB.
+            for i in 0..=last_header_to_be_deleted {
+                let result = HeaderBackend::<Block>::header(
+                    &storage,
+                    BlockId::<Block>::Hash(produced_headers[i as usize].hash()),
+                );
+                assert!(result.is_ok());
+                assert!(result.unwrap().is_none());
+            }
+
+            // All headers after last_header_to_be_deleted should exists
+            for i in (last_header_to_be_deleted + 1)..=i {
+                let result = HeaderBackend::<Block>::header(
+                    &storage,
+                    BlockId::<Block>::Hash(produced_headers[i as usize].hash()),
+                );
+                assert!(result.is_ok());
+                assert!(result.unwrap().is_some());
+            }
+
+            // Check if meta is updated correctly.
+            let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
+            assert!(result.is_ok());
+            let result = result.unwrap();
+            assert!(result.is_some());
+            let meta = result.unwrap();
+            assert_eq!(meta.total_stored, max_headers_allowed_to_store);
+            assert_eq!(
+                meta.oldest_stored_hash,
+                produced_headers[last_header_to_be_deleted as usize + 1].hash()
+            );
+        }
+
+        // Now, let's check if reducing max_headers_allowed_to_store parameter reduces storage.
+        let max_headers_allowed_to_store = max_headers_allowed_to_store - 3;
+        let result = Storage::new(data.clone(), max_headers_allowed_to_store);
+        assert!(result.is_ok());
+        let storage = result.unwrap();
+        current_header = create_next_header(current_header.clone());
+        produced_headers.push(current_header.clone());
+        assert!(StorageT::<Block>::import_header(
+            &storage,
+            current_header.clone(),
+            NewBlockState::Best
+        )
+        .is_ok());
+        assert!(data.encode().len() < current_size);
+        // Updating current size and size drift as per new max_headers_allowed_to_store
+        // value.
+        let current_size = data.encode().len();
+        let size_drift_allowed = max_headers_allowed_to_store;
+        let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let meta = result.unwrap();
+        assert_eq!(meta.total_stored, max_headers_allowed_to_store);
+        // we need to go back max_headers_allowed_to_store - 1 place in the produced headers array.
+        assert_eq!(
+            meta.oldest_stored_hash,
+            produced_headers
+                [(produced_headers.len() - 1) - max_headers_allowed_to_store as usize + 1]
+                .hash()
+        );
+        // Last max_headers_allowed_to_store blocks should exists in db
+        for i in 0..max_headers_allowed_to_store {
+            let result = HeaderBackend::<Block>::header(
+                &storage,
+                BlockId::<Block>::Hash(
+                    produced_headers[produced_headers.len() - 1 - i as usize].hash(),
+                ),
+            );
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_some());
+        }
+        let previous_oldest_stored_hash = meta.oldest_stored_hash;
+        let previosuly_stored_blocks = meta.total_stored;
+
+        // Now, let's check if increasing max_headers_allowed_to_store_parameter allows storage to grow
+        let max_headers_allowed_to_store = max_headers_allowed_to_store + 3;
+        let result = Storage::new(data.clone(), max_headers_allowed_to_store);
+        assert!(result.is_ok());
+        let storage = result.unwrap();
+        current_header = create_next_header(current_header.clone());
+        produced_headers.push(current_header.clone());
+        assert!(StorageT::<Block>::import_header(
+            &storage,
+            current_header.clone(),
+            NewBlockState::Best
+        )
+        .is_ok());
+        // Now, we are able to increase size beyond our previous size.
+        assert!(data.encode().len() > current_size + size_drift_allowed as usize);
+        let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let meta = result.unwrap();
+        assert_eq!(meta.total_stored, previosuly_stored_blocks + 1);
+        // Oldest stored hash should still be same as previous oldest stored hash as we didn't need to
+        // remove anything
+        assert_eq!(meta.oldest_stored_hash, previous_oldest_stored_hash);
+
+        // previously stored blocks + 1 blocks should exists in db
+        for i in 0..(previosuly_stored_blocks + 1) {
+            let result = HeaderBackend::<Block>::header(
+                &storage,
+                BlockId::<Block>::Hash(
+                    produced_headers[produced_headers.len() - 1 - i as usize].hash(),
+                ),
+            );
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_some());
+        }
     }
 }

@@ -170,14 +170,6 @@ where
     ) -> Result<CachedHeaderMetadata<Block>, Self::Error> {
         self.storage.header_metadata(hash)
     }
-
-    fn insert_header_metadata(&self, hash: Block::Hash, metadata: CachedHeaderMetadata<Block>) {
-        self.storage.insert_header_metadata(hash, metadata)
-    }
-
-    fn remove_header_metadata(&self, hash: Block::Hash) {
-        self.storage.remove_header_metadata(hash)
-    }
 }
 
 impl<S, Block> HeaderBackend<Block> for Client<S>
@@ -332,7 +324,7 @@ where
         }
 
         self.storage
-            .import_header(header, NewBlockState::Best, vec![])
+            .import_header(header, NewBlockState::Best)
             .map_err(|e| ConsensusError::ClientImport(e.to_string()))?;
 
         Ok(ImportResult::imported(true))
