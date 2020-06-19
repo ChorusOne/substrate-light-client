@@ -624,5 +624,36 @@ mod tests {
                 produced_headers[last_header_to_be_deleted as usize + 1].hash()
             );
         }
+
+        // Now, let's check if reducing max_headers_allowed_to_store parameter reduces storage.
+        let max_headers_allowed_to_store = max_headers_allowed_to_store - 3;
+        let result = Storage::new(data.clone(), max_headers_allowed_to_store);
+        assert!(result.is_ok());
+        let storage = result.unwrap();
+
+        current_header = create_next_header(current_header.clone());
+        produced_headers.push(current_header.clone());
+
+        assert!(StorageT::<Block>::import_header(
+            &storage,
+            current_header.clone(),
+            NewBlockState::Best
+        )
+        .is_ok());
+        assert!(data.encode().len() < current_size);
+
+        let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let meta = result.unwrap();
+        assert_eq!(meta.total_stored, max_headers_allowed_to_store);
+        // we need to go back max_headers_allowed_to_store - 1 place in the produced headers array.
+        assert_eq!(
+            meta.oldest_stored_hash,
+            produced_headers
+                [(produced_headers.len() - 1) - max_headers_allowed_to_store as usize + 1]
+                .hash()
+        );
     }
 }
