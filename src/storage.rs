@@ -576,7 +576,7 @@ mod tests {
 
         // Adding more header should not increase the size, as we have stored max headers
         for i in max_headers_allowed_to_store
-            ..((max_headers_allowed_to_store * 100) + (max_headers_allowed_to_store - 2) + 1)
+            ..((max_headers_allowed_to_store * 200) + (max_headers_allowed_to_store - 2) + 1)
         {
             current_header = create_next_header(current_header.clone());
             produced_headers.push(current_header.clone());
