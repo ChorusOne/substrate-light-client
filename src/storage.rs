@@ -427,9 +427,7 @@ where
         meta.finalized_hash = to_be_finalized_header.hash();
         meta.finalized_number = *to_be_finalized_header.number();
 
-        let mut tx = self.data.db.transaction();
-        Self::tx_store_meta(&mut tx, &meta);
-        self.data.db.write(tx).map_err(db_err)
+        self.store_meta(meta)
     }
 
     /// Get last finalized header.
