@@ -24,6 +24,8 @@ pub enum BlockchainError {
     NotAvailableOnLightClient,
     /// Last finalized block not parent of current.
     NonSequentialFinalization(String),
+    /// Last block imported not parent of current.
+    NonSequentialImport(String),
     /// Safety violation: new best block not descendent of last finalized.
     NotInFinalizedChain,
     /// Incomplete block import pipeline.
@@ -79,8 +81,13 @@ impl Display for BlockchainError {
                 f,
                 "This method is not currently available when running in light client mode"
             ),
-            BlockchainError::NonSequentialFinalization(s) => {
-                write!(f, "Did not finalize blocks in sequential order. {}", s)
+            BlockchainError::NonSequentialFinalization(s) => write!(
+                f,
+                "Trying to finalize blocks in non-sequential order. {}",
+                s
+            ),
+            BlockchainError::NonSequentialImport(s) => {
+                write!(f, "Trying to import blocks in non-sequential order. {}", s)
             }
             BlockchainError::NotInFinalizedChain => write!(
                 f,

@@ -542,7 +542,7 @@ mod tests {
         // Let's change number of block to be non sequential
         next_header.number += 1;
 
-        assert_failed_header_ingestion(encoded_data, next_header, None, String::from("Other(ClientImport(\"Import failed: Did not finalize blocks in sequential order. tried to import non sequential block. Expected block number: 2. Got: 3\"))"), 1);
+        assert_failed_header_ingestion(encoded_data, next_header, None, String::from("Other(ClientImport(\"Import failed: Trying to import blocks in non-sequential order. to be imported block need to be child of last best block or first block itself. Expected block number: 2. Got: 3\"))"), 1);
     }
 
     #[test]
