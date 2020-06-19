@@ -25,7 +25,7 @@ pub fn setup_block_processor(
     encoded_data: Vec<u8>,
     max_non_finalized_blocks_allowed: u64,
 ) -> BlockchainResult<(BlockProcessor<Block>, db::Data)> {
-    let (data, storage) = initialize_storage(encoded_data, max_non_finalized_blocks_allowed);
+    let (data, storage) = initialize_storage(encoded_data, max_non_finalized_blocks_allowed)?;
 
     // Custom client implementation with dummy runtime
     let client = Arc::new(Client::new(storage.clone()));

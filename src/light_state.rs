@@ -25,6 +25,7 @@ use sp_runtime::Justification;
 pub(crate) fn initialize_state(
     initial_header: Header,
     initial_authority_set: LightAuthoritySet,
+    max_headers_allowed_to_store: u64,
 ) -> Result<Vec<u8>, BlockchainError> {
     let db = create(NUM_COLUMNS);
     let new_data = crate::db::Data {
@@ -32,14 +33,9 @@ pub(crate) fn initialize_state(
         genesis_data: GenesisData {},
     };
     let empty_data = new_data.encode();
-    let (data, storage) = initialize_storage(empty_data, 1);
+    let (data, storage) = initialize_storage(empty_data, max_headers_allowed_to_store)?;
     insert_light_authority_set(storage.clone(), initial_authority_set)?;
-    StorageT::<Block>::import_header(
-        storage.as_ref(),
-        initial_header,
-        NewBlockState::Best,
-        vec![],
-    )?;
+    StorageT::<Block>::import_header(storage.as_ref(), initial_header, NewBlockState::Best)?;
 
     Ok(data.encode())
 }
@@ -53,7 +49,8 @@ pub(crate) fn current_status<Block>(
 where
     Block: BlockT,
 {
-    let (_, storage) = initialize_storage(encoded_data, 1);
+    // It doesn't matter what is the value of max_headers_allowed_to_store as we are only reading the storage meta
+    let (_, storage) = initialize_storage(encoded_data, 2)?;
     let possible_light_authority_set = fetch_light_authority_set(storage.clone())?;
     let mut possible_finalized_header: Option<Block::Header> = None;
     let mut possible_best_header: Option<Block::Header> = None;
@@ -279,7 +276,7 @@ mod tests {
             ),
         );
 
-        let result = initialize_state(initial_header.clone(), authority_set);
+        let result = initialize_state(initial_header.clone(), authority_set, 2);
         assert!(result.is_ok());
         let encoded_data = result.unwrap();
         assert!(encoded_data.len() > 0);

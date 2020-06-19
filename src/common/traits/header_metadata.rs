@@ -10,10 +10,4 @@ pub trait HeaderMetadata<Block: BlockT> {
         &self,
         hash: Block::Hash,
     ) -> Result<CachedHeaderMetadata<Block>, Self::Error>;
-    fn insert_header_metadata(
-        &self,
-        hash: Block::Hash,
-        header_metadata: CachedHeaderMetadata<Block>,
-    );
-    fn remove_header_metadata(&self, hash: Block::Hash);
 }

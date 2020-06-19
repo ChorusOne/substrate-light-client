@@ -20,14 +20,14 @@ pub const NUM_COLUMNS: u32 = 11;
 
 pub fn initialize_storage(
     encoded_data: Vec<u8>,
-    max_non_finalized_blocks_allowed: u64,
-) -> (db::Data, Arc<Storage>) {
+    max_headers_allowed_to_store: u64,
+) -> Result<(db::Data, Arc<Storage>), BlockchainError> {
     let data = db::Data::decode(&mut encoded_data.as_slice()).unwrap();
 
-    return (
+    return Ok((
         data.clone(),
-        Arc::new(Storage::new(data, max_non_finalized_blocks_allowed)),
-    );
+        Arc::new(Storage::new(data, max_headers_allowed_to_store)?),
+    ));
 }
 
 pub fn store_next_authority_change<AS, Block>(

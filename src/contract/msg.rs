@@ -10,7 +10,7 @@ pub struct InitMsg {
     pub block: String,
     pub set_id: u64,
     pub authority_set: String,
-    pub max_non_finalized_blocks_allowed: u64,
+    pub max_headers_allowed_to_store: u64,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
