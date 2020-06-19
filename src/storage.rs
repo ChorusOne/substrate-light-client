@@ -372,8 +372,8 @@ where
                 return Err(BlockchainError::NotInFinalizedChain);
             }
             if *header.number() != meta.best_number + One::one() {
-                return Err(BlockchainError::NonSequentialFinalization(format!(
-                    "tried to import non sequential block. Expected block number: {}. Got: {}",
+                return Err(BlockchainError::NonSequentialImport(format!(
+                    "to be imported block need to be child of last best block or first block itself. Expected block number: {}. Got: {}",
                     meta.best_number + One::one(),
                     *header.number()
                 )));
@@ -424,15 +424,11 @@ where
             return Err(BlockchainError::NonSequentialFinalization(format!("Error: {}", "to be finalized block need to be child of last finalized block or first block itself")));
         }
 
-        meta.total_stored -= 1;
         meta.finalized_hash = to_be_finalized_header.hash();
         meta.finalized_number = *to_be_finalized_header.number();
 
         let mut tx = self.data.db.transaction();
         Self::tx_store_meta(&mut tx, &meta);
-        if !first_block_to_be_finalized {
-            Self::tx_delete_header::<Block>(&mut tx, to_be_finalized_header.parent_hash());
-        }
         self.data.db.write(tx).map_err(db_err)
     }
 
