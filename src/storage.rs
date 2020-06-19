@@ -695,7 +695,7 @@ mod tests {
         // remove anything
         assert_eq!(meta.oldest_stored_hash, previous_oldest_stored_hash);
 
-        // Last max_headers_allowed_to_store blocks should exists in db
+        // previously stored blocks + 1 blocks should exists in db
         for i in 0..(previosuly_stored_blocks + 1) {
             let result = HeaderBackend::<Block>::header(
                 &storage,
