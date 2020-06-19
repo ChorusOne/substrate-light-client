@@ -11,6 +11,7 @@ pub struct InitMsg {
     pub set_id: u64,
     pub authority_set: String,
     pub max_headers_allowed_to_store: u64,
+    pub max_headers_allowed_between_justifications: u64,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
