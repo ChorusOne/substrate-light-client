@@ -48,6 +48,14 @@ pub(crate) fn init<S: Storage, A: Api, Q: Querier>(
         });
     }
 
+    if msg.max_headers_allowed_between_justifications == 0 {
+        return Err(StdError::ParseErr {
+            target: "msg.max_headers_allowed_between_justifications".to_string(),
+            msg: "max_headers_allowed_between_justification need to be at least 1".to_string(),
+            backtrace: None,
+        });
+    }
+
     let block_bytes = match hex::decode(&msg.block[2..]) {
         Ok(bytes) => bytes,
         Err(e) => {
@@ -113,6 +121,8 @@ pub(crate) fn init<S: Storage, A: Api, Q: Querier>(
         name: msg.name,
         light_client_data,
         max_headers_allowed_to_store: msg.max_headers_allowed_to_store,
+        max_headers_allowed_between_justifications: msg.max_headers_allowed_between_justifications,
+        headers_ingested_after_last_justification: 1,
     };
 
     contract_state(&mut deps.storage).save(&new_contract_state)?;
@@ -210,6 +220,22 @@ fn try_block<S: Storage, A: Api, Q: Querier>(
         }
     };
 
+    if block.justification.is_none()
+        && state.headers_ingested_after_last_justification
+            >= state.max_headers_allowed_between_justifications
+    {
+        return Err(StdError::GenericErr {
+            msg: "Cannot ingest header without justification".to_string(),
+            backtrace: None,
+        });
+    }
+
+    let headers_ingested_after_last_justification = if block.justification.is_some() {
+        0
+    } else {
+        state.headers_ingested_after_last_justification + 1
+    };
+
     let header = block.block.header.clone();
 
     let (_result, updated_light_client_data) = match ingest_finalized_header(
@@ -230,7 +256,8 @@ fn try_block<S: Storage, A: Api, Q: Querier>(
     let new_contract_state = ContractState {
         name: state.name,
         light_client_data: updated_light_client_data,
-        max_headers_allowed_to_store: state.max_headers_allowed_to_store,
+        headers_ingested_after_last_justification,
+        ..state
     };
 
     contract_state(&mut deps.storage).save(&new_contract_state)?;
@@ -265,8 +292,8 @@ mod tests {
     use crate::contract::{handle, init, query, read_only_contract_state};
     use crate::msg::{HandleMsg, InitMsg};
     use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
-    use cosmwasm_std::Extern;
     use cosmwasm_std::{from_binary, Env};
+    use cosmwasm_std::{Extern, StdError};
 
     #[test]
     fn test_contract_init_and_update() {
@@ -284,7 +311,8 @@ mod tests {
             block: "0x5e9fc49076803d0ba88c719252ede5ae713d09367162d344e9b79ef3aac2efa03e620300fe518cc595e8f5ede8010cf6d26352f6a089ee52f992153a540c7b5d9b659ea272c9c1e535cf5ca49ab2d72059671d80f69c6dba7e6c0dca1e27c3832e873f2b08066175726120448dd10f0000000005617572610101fe734978fa3cb9804346988424124add53316e68e9dcd96a5dfc5a576fe61262031463e0e3a1cdb15538a763dddfbbdf2d3c47e3ecc72deebb3ba5ec59b1168204280402000bc0e95ebf720100".into(),
             authority_set: "0x0488dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee0100000000000000".to_string(),
             max_headers_allowed_to_store: 256,
-            set_id: 1
+            set_id: 1,
+            max_headers_allowed_between_justifications: 2
         };
         let init_header_hash =
             hex::decode("f157283bcfe5ace5f3258bdb595ee8c6761394a56c8e73b6aaf734e6fb1e7c92")
@@ -335,5 +363,20 @@ mod tests {
         assert_eq!(query_response.best_header_hash, next_header_hash);
         assert_eq!(query_response.best_header_height, next_header_number);
         assert_eq!(query_response.current_authority_set, next_authority_set);
+
+        let update_msg = HandleMsg::UpdateClient {
+            block: "0xf157283bcfe5ace5f3258bdb595ee8c6761394a56c8e73b6aaf734e6fb1e7c92426203000ad92ba15285e38e29472d35c29a8e0097e0748fa66fca1b4c834e13f0604de6f7e776ac0632a86d967e1fc4694d51b15c06dadf6c2d0f60a0c661993ffa6d5308066175726120458dd10f00000000056175726101019c9a0a6afd95ff9b8a479bab6676867d19f388b187534394661f0b9ca540b86cd5847174d8b1075f61c01f3b0f5dfa8c643b15c226ebace6aa5aca43cd12ce8504280402000b30015fbf720100".to_string(),
+            authority_set: "0x0488dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee0100000000000000".to_string(),
+        };
+        // This wil fail as at max only two headers are allowed between justification
+        let result = handle(&mut extern_dep, Env::default(), update_msg);
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap(),
+            StdError::GenericErr {
+                msg: "Cannot ingest header without justification".to_string(),
+                backtrace: None,
+            }
+        );
     }
 }

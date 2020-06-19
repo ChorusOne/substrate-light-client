@@ -9,5 +9,7 @@ pub type H256 = Vec<u8>;
 pub struct ContractState {
     pub name: String,
     pub light_client_data: Vec<u8>,
+    pub headers_ingested_after_last_justification: u64,
+    pub max_headers_allowed_between_justifications: u64,
     pub max_headers_allowed_to_store: u64,
 }
