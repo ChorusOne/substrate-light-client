@@ -630,10 +630,8 @@ mod tests {
         let result = Storage::new(data.clone(), max_headers_allowed_to_store);
         assert!(result.is_ok());
         let storage = result.unwrap();
-
         current_header = create_next_header(current_header.clone());
         produced_headers.push(current_header.clone());
-
         assert!(StorageT::<Block>::import_header(
             &storage,
             current_header.clone(),
@@ -641,7 +639,10 @@ mod tests {
         )
         .is_ok());
         assert!(data.encode().len() < current_size);
-
+        // Updating current size and size drift as per new max_headers_allowed_to_store
+        // value.
+        let current_size = data.encode().len();
+        let size_drift_allowed = max_headers_allowed_to_store;
         let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
         assert!(result.is_ok());
         let result = result.unwrap();
@@ -655,5 +656,55 @@ mod tests {
                 [(produced_headers.len() - 1) - max_headers_allowed_to_store as usize + 1]
                 .hash()
         );
+        // Last max_headers_allowed_to_store blocks should exists in db
+        for i in 0..max_headers_allowed_to_store {
+            let result = HeaderBackend::<Block>::header(
+                &storage,
+                BlockId::<Block>::Hash(
+                    produced_headers[produced_headers.len() - 1 - i as usize].hash(),
+                ),
+            );
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_some());
+        }
+        let previous_oldest_stored_hash = meta.oldest_stored_hash;
+        let previosuly_stored_blocks = meta.total_stored;
+
+        // Now, let's check if increasing max_headers_allowed_to_store_parameter allows storage to grow
+        let max_headers_allowed_to_store = max_headers_allowed_to_store + 3;
+        let result = Storage::new(data.clone(), max_headers_allowed_to_store);
+        assert!(result.is_ok());
+        let storage = result.unwrap();
+        current_header = create_next_header(current_header.clone());
+        produced_headers.push(current_header.clone());
+        assert!(StorageT::<Block>::import_header(
+            &storage,
+            current_header.clone(),
+            NewBlockState::Best
+        )
+        .is_ok());
+        // Now, we are able to increase size beyond our previous size.
+        assert!(data.encode().len() > current_size + size_drift_allowed as usize);
+        let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let meta = result.unwrap();
+        assert_eq!(meta.total_stored, previosuly_stored_blocks + 1);
+        // Oldest stored hash should still be same as previous oldest stored hash as we didn't need to
+        // remove anything
+        assert_eq!(meta.oldest_stored_hash, previous_oldest_stored_hash);
+
+        // Last max_headers_allowed_to_store blocks should exists in db
+        for i in 0..(previosuly_stored_blocks + 1) {
+            let result = HeaderBackend::<Block>::header(
+                &storage,
+                BlockId::<Block>::Hash(
+                    produced_headers[produced_headers.len() - 1 - i as usize].hash(),
+                ),
+            );
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_some());
+        }
     }
 }
