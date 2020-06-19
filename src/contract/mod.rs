@@ -378,5 +378,7 @@ mod tests {
                 backtrace: None,
             }
         );
+
+        // TODO: Add a scenario where header with justification can be ingested and headers_ingested_after_last_justification is reset
     }
 }
