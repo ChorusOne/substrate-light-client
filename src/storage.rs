@@ -376,6 +376,7 @@ where
             }
         } else {
             meta.genesis_hash = header.hash();
+            meta.oldest_stored_hash = header.hash();
         }
 
         meta.total_stored += 1;
@@ -480,7 +481,9 @@ mod tests {
     use crate::types::{Block, Header};
     use parity_scale_codec::Encode;
     use sp_api::BlockId;
-    use sp_runtime::traits::{Header as _, One};
+    use sp_runtime::traits::{
+        BlakeTwo256, Block as BlockT, HashFor, Header as HeaderT, NumberFor, One,
+    };
 
     fn create_next_header(header: Header) -> Header {
         let mut next_header = header.clone();
@@ -536,7 +539,13 @@ mod tests {
             Default::default(),
         );
 
-        for _ in 0..max_headers_allowed_to_store {
+        // Initially meta structure should not exists
+        let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+
+        // Let's store first max_headers_allowed_to_store number of headers
+        for i in 0..max_headers_allowed_to_store {
             current_header = create_next_header(current_header.clone());
             produced_headers.push(current_header.clone());
             assert!(StorageT::<Block>::import_header(
@@ -545,6 +554,15 @@ mod tests {
                 NewBlockState::Best
             )
             .is_ok());
+
+            // Check if meta is updated correctly.
+            let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
+            assert!(result.is_ok());
+            let result = result.unwrap();
+            assert!(result.is_some());
+            let meta = result.unwrap();
+            assert_eq!(meta.total_stored, i + 1);
+            assert_eq!(meta.oldest_stored_hash, produced_headers[0].hash());
         }
 
         let current_size = data.encode().len();
@@ -569,7 +587,7 @@ mod tests {
 
             let last_header_to_be_deleted = i - max_headers_allowed_to_store;
 
-            // Now, headers at less than or equal to last_header_to_be_deleted won't
+            // Headers at less than or equal to last_header_to_be_deleted won't
             // exists in DB.
             for i in 0..=last_header_to_be_deleted {
                 let result = HeaderBackend::<Block>::header(
@@ -589,6 +607,18 @@ mod tests {
                 assert!(result.is_ok());
                 assert!(result.unwrap().is_some());
             }
+
+            // Check if meta is updated correctly.
+            let result = storage.fetch_meta::<NumberFor<Block>, <Block as BlockT>::Hash>();
+            assert!(result.is_ok());
+            let result = result.unwrap();
+            assert!(result.is_some());
+            let meta = result.unwrap();
+            assert_eq!(meta.total_stored, max_headers_allowed_to_store);
+            assert_eq!(
+                meta.oldest_stored_hash,
+                produced_headers[last_header_to_be_deleted as usize + 1].hash()
+            );
         }
     }
 }
