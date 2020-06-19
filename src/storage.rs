@@ -313,6 +313,10 @@ where
 
         let mut tx = self.data.db.transaction();
 
+        // We need to go down this in-efficient route, because
+        // to have a double linked list of headers require more storage and
+        // memory which we don't have.
+        // So, we need to backtrack every time we are above the limit.
         if meta.total_stored >= self.max_headers_allowed_to_store {
             let mut current_hash = meta.best_hash;
             let amount_of_headers_to_backtrack = self.max_headers_allowed_to_store - 1;
