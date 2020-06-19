@@ -471,7 +471,6 @@ where
 mod tests {
     use crate::common::traits::header_backend::HeaderBackend;
     use crate::common::traits::storage::Storage as StorageT;
-    use crate::common::types::blockchain_error::BlockchainError;
     use crate::common::types::new_block_state::NewBlockState;
     use crate::db::{create, Data};
     use crate::genesis::GenesisData;
@@ -479,9 +478,7 @@ mod tests {
     use crate::types::{Block, Header};
     use parity_scale_codec::Encode;
     use sp_api::BlockId;
-    use sp_runtime::traits::{
-        BlakeTwo256, Block as BlockT, HashFor, Header as HeaderT, NumberFor, One,
-    };
+    use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor, One};
 
     fn create_next_header(header: Header) -> Header {
         let mut next_header = header.clone();
