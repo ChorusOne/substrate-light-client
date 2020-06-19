@@ -112,7 +112,7 @@ pub(crate) fn init<S: Storage, A: Api, Q: Querier>(
     let new_contract_state = ContractState {
         name: msg.name,
         light_client_data,
-        max_non_finalized_blocks_allowed: msg.max_headers_allowed_to_store,
+        max_headers_allowed_to_store: msg.max_headers_allowed_to_store,
     };
 
     contract_state(&mut deps.storage).save(&new_contract_state)?;
@@ -216,7 +216,7 @@ fn try_block<S: Storage, A: Api, Q: Querier>(
         state.light_client_data.clone(),
         header.clone(),
         block.justification,
-        state.max_non_finalized_blocks_allowed,
+        state.max_headers_allowed_to_store,
     ) {
         Ok(result) => result,
         Err(e) => {
@@ -230,7 +230,7 @@ fn try_block<S: Storage, A: Api, Q: Querier>(
     let new_contract_state = ContractState {
         name: state.name,
         light_client_data: updated_light_client_data,
-        max_non_finalized_blocks_allowed: state.max_non_finalized_blocks_allowed,
+        max_headers_allowed_to_store: state.max_headers_allowed_to_store,
     };
 
     contract_state(&mut deps.storage).save(&new_contract_state)?;
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_contract_init_and_update() {
-        let mut storage = MockStorage::new();
+        let storage = MockStorage::new();
         let api = MockApi::new(5);
         let querier = MockQuerier::default();
         let mut extern_dep = Extern {
