@@ -24,5 +24,5 @@ chmod +x test-tool.sh
 ```
 ### Upload optimized wasm bytecode in CosmWasm enabled blockchain
 ```commandline
-wasmcli tx wasm store substrate_client.wasm --from john_doe --gas 1600000  -y
+wasmcli tx wasm store substrate_client.wasm --from john_doe --gas 1700000  -y
 ```
