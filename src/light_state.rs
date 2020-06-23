@@ -827,7 +827,7 @@ mod tests {
         let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
             round: 1,
             commit,
-            votes_ancestries: header_ancestry[1..].to_vec(), // first_header.clone(), initial_header.clone()
+            votes_ancestries: header_ancestry[1..].to_vec(), // Sixth header
         };
 
         let justification = Some(grandpa_justification.encode());
