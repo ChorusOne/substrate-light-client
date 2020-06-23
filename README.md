@@ -1,5 +1,6 @@
 # substrate-client
-Implementation of substrate client in rust compilable to wasm. It is written to be integrated with CosmWasm readily.
+Implementation of substrate light client in rust compilable to wasm. It is written to be integrated with CosmWasm readily, and is 
+optimized to run in a constrained environment of a smart contract.
 
 ## Compilation
 
@@ -24,5 +25,5 @@ chmod +x test-tool.sh
 ```
 ### Upload wasm bytecode in CosmWasm enabled blockchain
 ```commandline
-wasmcli tx wasm store substrate_client.wasm --from john_doe --gas 600000  -y
+wasmcli tx wasm store substrate_client.wasm --from john_doe --gas 1600000  -y
 ```
