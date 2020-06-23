@@ -11,8 +11,8 @@ optimized to run in a constrained environment of a smart contract.
     2. `x86_64-apple-darwin` to run tests
 
 ### Compile in wasm
-Run `cargo wasm` in project directory. This will produce a file `/target/wasm32-unknown-unknown/release/substrate_client.wasm`
-To produce a size optimized build, you need to run `RUSTFLAGS='-C link-arg=-s' cargo wasm`.
+Run `make wasm` in project directory. This will produce a file `/target/wasm32-unknown-unknown/release/substrate_client.wasm`
+To produce a size optimized build, you need to run `make wasm-optimized`.
 
 ### Testing
 1. Run all the tests:
