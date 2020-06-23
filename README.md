@@ -23,7 +23,7 @@ Test tool is a bash script that run two tests with `-- --nocapture` flag, which 
 chmod +x test-tool.sh
 ./test-tool.sh
 ```
-### Upload wasm bytecode in CosmWasm enabled blockchain
+### Upload optimized wasm bytecode in CosmWasm enabled blockchain
 ```commandline
 wasmcli tx wasm store substrate_client.wasm --from john_doe --gas 1600000  -y
 ```
