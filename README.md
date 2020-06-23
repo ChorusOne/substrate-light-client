@@ -1,6 +1,5 @@
 # substrate-client
-Implementation of substrate light client in rust compilable to wasm. It is written to be integrated with CosmWasm readily, and is 
-optimized to run in a constrained environment of a smart contract.
+Implementation of substrate light client in rust compilable to wasm. It is written to be integrated with CosmWasm readily, and is optimized to run in a constrained environment of a smart contract.
 
 ## Compilation
 
