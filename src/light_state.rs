@@ -678,7 +678,7 @@ mod tests {
         );
 
         write_test_flow(format!(
-            "\n\nLet's rewind our light client state by restoring state two blocks earlier, the header will be processed and authority set will be updated."
+            "\n\nLet's rewind our light client state by restoring state two blocks earlier and submit next block with justification, the header will be processed and authority set will be updated."
         ));
 
         let commit = create_justification_commit(1, 0, vec![third_header.clone()], &genesis_peers);
