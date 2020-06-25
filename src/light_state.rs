@@ -664,7 +664,7 @@ mod tests {
             assert_successful_header_ingestion(encoded_data, third_header.clone(), None, 1);
 
         write_test_flow(format!(
-            "\n\nWe won't be able to ingest this block, as the block trying to enact new authority set isn't finalized."
+            "\n\nWe won't be able to ingest this block, as the older block which introduced new authority set isn't finalized, yet."
         ));
 
         assert_failed_header_ingestion(
