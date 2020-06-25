@@ -1,4 +1,5 @@
 use crate::common::traits::aux_store::AuxStore;
+use crate::common::traits::header_backend::HeaderBackend;
 use crate::common::traits::verifier::Verifier;
 use crate::common::types::block_import_params::BlockImportParams;
 use crate::common::types::block_origin::BlockOrigin;
@@ -30,24 +31,21 @@ fn find_scheduled_change<B: BlockT>(header: &B::Header) -> Option<ScheduledChang
         .convert_first(|l| l.try_to(id).and_then(filter_log))
 }
 
-pub struct GrandpaVerifier<AS> {
-    aux_store: Arc<AS>,
+pub struct GrandpaVerifier<S> {
+    storage: Arc<S>,
 }
 
-impl<AS> GrandpaVerifier<AS>
-where
-    AS: AuxStore + Send + Sync,
-{
-    pub fn new(aux_store: Arc<AS>) -> Self {
+impl<S> GrandpaVerifier<S> {
+    pub fn new(storage: Arc<S>) -> Self {
         Self {
-            aux_store: aux_store.clone(),
+            storage: storage.clone(),
         }
     }
 }
 
-impl<AS, Block> Verifier<Block> for GrandpaVerifier<AS>
+impl<S, Block> Verifier<Block> for GrandpaVerifier<S>
 where
-    AS: AuxStore + Send + Sync,
+    S: AuxStore + HeaderBackend<Block>,
     Block: BlockT,
 {
     fn verify(
@@ -59,12 +57,12 @@ where
     ) -> Result<BlockImportParams<Block>, String> {
         let (possible_authority_change, scheduled_change_exists) = {
             let possible_authority_change =
-                fetch_next_authority_change::<AS, Block>(self.aux_store.clone())
+                fetch_next_authority_change::<S, Block>(self.storage.clone())
                     .map_err(|e| format!("{}", e))?;
             match possible_authority_change {
                 Some(authority_change) => {
                     if authority_change.next_change_at == *header.number() {
-                        delete_next_authority_change(self.aux_store.clone())
+                        delete_next_authority_change(self.storage.clone())
                             .map_err(|e| format!("{}", e))?;
                         (Some(authority_change), false)
                     } else {
@@ -75,6 +73,14 @@ where
             }
         };
 
+        if let Some(authority_change) = possible_authority_change.as_ref() {
+            let (_, enacting_header_number) = authority_change.block_enacting_this_change;
+            let info = self.storage.info();
+            if info.finalized_number < enacting_header_number {
+                return Err("block trying to enact new authority set isn't finalized".into());
+            }
+        }
+
         let found_scheduled_authority_change = find_scheduled_change::<Block>(&header);
         let possible_next_authority_change: Option<NextChangeInAuthority<Block>> =
             match found_scheduled_authority_change {
@@ -84,6 +90,7 @@ where
                     } else {
                         Ok(Some(NextChangeInAuthority::new(
                             *header.number() + scheduled_change.delay,
+                            (header.hash(), *header.number()),
                             scheduled_change,
                         )))
                     }
@@ -102,8 +109,9 @@ where
         }
 
         if let Some(authority_change) = possible_authority_change {
+            let info = self.storage.info();
             let possible_current_authority_set =
-                fetch_light_authority_set(self.aux_store.clone()).map_err(|e| format!("{}", e))?;
+                fetch_light_authority_set(self.storage.clone()).map_err(|e| format!("{}", e))?;
             let current_authority_set = if possible_current_authority_set.is_none() {
                 Err("No previous authority set found")
             } else {
@@ -113,7 +121,7 @@ where
                 &current_authority_set,
                 authority_change.change.next_authorities,
             );
-            insert_light_authority_set(self.aux_store.clone(), next_authority_set)
+            insert_light_authority_set(self.storage.clone(), next_authority_set)
                 .map_err(|e| format!("{}", e))?;
         }
 

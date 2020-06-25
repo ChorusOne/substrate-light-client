@@ -8,6 +8,7 @@ where
     Block: BlockT,
 {
     pub next_change_at: NumberFor<Block>,
+    pub block_enacting_this_change: (Block::Hash, NumberFor<Block>),
     pub change: ScheduledChange<NumberFor<Block>>,
 }
 
@@ -17,10 +18,12 @@ where
 {
     pub fn new(
         next_change_at: NumberFor<Block>,
+        block_enacting_this_change: (Block::Hash, NumberFor<Block>),
         change: ScheduledChange<NumberFor<Block>>,
     ) -> Self {
         Self {
             next_change_at,
+            block_enacting_this_change,
             change,
         }
     }
