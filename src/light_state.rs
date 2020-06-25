@@ -379,6 +379,7 @@ mod tests {
         let mut next_header = header.clone();
         next_header.number += 1;
         next_header.parent_hash = header.hash();
+        next_header.digest.clear();
         next_header
     }
 
@@ -564,29 +565,57 @@ mod tests {
 
     #[test]
     fn test_authority_set_processing() {
-        write_test_flow(format!("Starting Authority set processing test"));
-        let (encoded_data, initial_header) = assert_successful_db_init(None, 1);
+        let genesis_peers = [Ed25519Keyring::Alice, Ed25519Keyring::Bob];
+        let genesis_voters = make_ids(&genesis_peers);
+        let genesis_authority_set = LightAuthoritySet::new(0, genesis_voters.clone());
 
-        let mut next_header = create_next_header(initial_header);
+        let first_peers = [Ed25519Keyring::Charlie, Ed25519Keyring::Dave];
+        let first_voters = make_ids(&first_peers);
+        let first_authority_set = LightAuthoritySet::construct_next_authority_set(
+            &genesis_authority_set,
+            first_voters.clone(),
+        );
+
+        let second_peers = [Ed25519Keyring::Eve, Ed25519Keyring::Ferdie];
+        let second_voters = make_ids(&second_peers);
+        let second_authority_set = LightAuthoritySet::construct_next_authority_set(
+            &first_authority_set,
+            second_voters.clone(),
+        );
+
+        write_test_flow(format!("Starting Authority set processing test"));
+        let (encoded_data, initial_header) =
+            assert_successful_db_init(Some(genesis_authority_set.clone()), 1);
+
+        let mut first_header = create_next_header(initial_header);
+        let change = ScheduledChange {
+            next_authorities: first_voters.clone(),
+            delay: 3,
+        };
+        first_header.digest_mut().push(DigestItem::Consensus(
+            GRANDPA_ENGINE_ID,
+            sp_finality_grandpa::ConsensusLog::ScheduledChange(change.clone()).encode(),
+        ));
+        let mut second_header = create_next_header(first_header.clone());
+        let third_header = create_next_header(second_header.clone());
+        let mut fourth_header = create_next_header(third_header.clone());
+        let new_change = ScheduledChange {
+            next_authorities: second_voters.clone(),
+            delay: 2,
+        };
+        fourth_header.digest_mut().push(DigestItem::Consensus(
+            GRANDPA_ENGINE_ID,
+            sp_finality_grandpa::ConsensusLog::ScheduledChange(new_change.clone()).encode(),
+        ));
+        let fifth_header = create_next_header(fourth_header.clone());
+        let sixth_header = create_next_header(fifth_header.clone());
 
         write_test_flow(format!(
             "\n\nPushing scheduled change with next header and verifying data."
         ));
-        // Let's push scheduled change
-        let change = ScheduledChange {
-            next_authorities: vec![
-                (AuthorityId::from_slice(&[1; 32]), 3),
-                (AuthorityId::from_slice(&[1; 32]), 3),
-            ],
-            delay: 2,
-        };
-        next_header.digest_mut().push(DigestItem::Consensus(
-            GRANDPA_ENGINE_ID,
-            sp_finality_grandpa::ConsensusLog::ScheduledChange(change.clone()).encode(),
-        ));
         // Updating encoded data
         let encoded_data =
-            assert_successful_header_ingestion(encoded_data, next_header.clone(), None, 1);
+            assert_successful_header_ingestion(encoded_data, first_header.clone(), None, 1);
 
         write_test_flow(format!(
             "\n\nWe should now have next scheduled change in database"
@@ -594,14 +623,13 @@ mod tests {
         // We should now have next schedule change in database
         assert_next_change_in_authority(encoded_data.clone(), &change, 1);
         // Current authority set remains same
-        assert_authority_set(encoded_data.clone(), &LightAuthoritySet::new(0, vec![]), 1);
+        assert_authority_set(encoded_data.clone(), &genesis_authority_set, 1);
 
         write_test_flow(format!(
             "\n\nWe cannot push another authority set while previous one exists"
         ));
-        // We cannot push another authority set while previous one exists
-        let mut next_header = create_next_header(next_header);
-        next_header.digest_mut().push(DigestItem::Consensus(
+
+        second_header.digest_mut().push(DigestItem::Consensus(
             GRANDPA_ENGINE_ID,
             sp_finality_grandpa::ConsensusLog::ScheduledChange(ScheduledChange {
                 next_authorities: vec![
@@ -614,7 +642,7 @@ mod tests {
         ));
         assert_failed_header_ingestion(
             encoded_data.clone(),
-            next_header.clone(),
+            second_header.clone(),
             None,
             String::from("VerificationFailed(\"Scheduled change already exists.\")"),
             1,
@@ -623,29 +651,52 @@ mod tests {
         write_test_flow(format!(
             "\n\nAfter clearing header's digest, we were able to ingest it"
         ));
-        next_header.digest.clear();
+        second_header.digest.clear();
         let encoded_data =
-            assert_successful_header_ingestion(encoded_data, next_header.clone(), None, 1);
+            assert_successful_header_ingestion(encoded_data, second_header.clone(), None, 1);
+        let saved_encoded_data = encoded_data.clone();
 
         write_test_flow(format!(
-            "\n\nWe can push another authority set as new authority set will be enacted."
-        ));
-        // We can push another authority set as new authority set will be enacted.
-        let mut next_header = create_next_header(next_header);
-        let new_change = ScheduledChange {
-            next_authorities: vec![
-                (AuthorityId::from_slice(&[3; 32]), 5),
-                (AuthorityId::from_slice(&[3; 32]), 5),
-            ],
-            delay: 2,
-        };
-        next_header.digest_mut().push(DigestItem::Consensus(
-            GRANDPA_ENGINE_ID,
-            sp_finality_grandpa::ConsensusLog::ScheduledChange(new_change.clone()).encode(),
+            "\n\nIf we do not submit justification with this block, next block cannot be ingested as, authority set due to enacted in next block cannot be trusted."
         ));
 
         let encoded_data =
-            assert_successful_header_ingestion(encoded_data, next_header.clone(), None, 1);
+            assert_successful_header_ingestion(encoded_data, third_header.clone(), None, 1);
+
+        write_test_flow(format!(
+            "\n\nWe won't be able to ingest this block, as the block trying to enact new authority set isn't finalized."
+        ));
+
+        assert_failed_header_ingestion(
+            encoded_data.clone(),
+            fourth_header.clone(),
+            None,
+            String::from(
+                "VerificationFailed(\"block trying to enact new authority set isn\\'t finalized\")",
+            ),
+            1,
+        );
+
+        write_test_flow(format!(
+            "\n\nLet's rewind our light client state by restoring state two blocks earlier, the header will be processed and authority set will be updated."
+        ));
+
+        let commit = create_justification_commit(1, 0, vec![third_header.clone()], &genesis_peers);
+        let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
+            round: 1,
+            commit,
+            votes_ancestries: vec![],
+        };
+        let encoded_data = assert_successful_header_ingestion(
+            saved_encoded_data,
+            third_header.clone(),
+            Some(grandpa_justification.encode()),
+            1,
+        );
+
+        write_test_flow(format!("\n\nNow with ingestion of new block, authority set will be changed. We will also use this block to enact another change."));
+        let encoded_data =
+            assert_successful_header_ingestion(encoded_data, fourth_header.clone(), None, 1);
 
         write_test_flow(format!("\n\nNow, we have our authority set changed, and older NextChangeInAuthority struct replaced by new change."));
 
@@ -659,22 +710,25 @@ mod tests {
         // Last authority set had set_id of 0
         // so while ingesting new authority set it
         // was incremented by 1.
-        assert_authority_set(
-            encoded_data.clone(),
-            &LightAuthoritySet::new(1, change.next_authorities.clone()),
-            1,
-        );
+        assert_authority_set(encoded_data.clone(), &first_authority_set, 1);
 
         // Now, a scenario where scheduled change isn't part of digest after two blocks delay
         // In this case new authority set will be enacted and aux entry will be removed
 
         write_test_flow(format!("\n\nNow, a scenario where scheduled change isn't part of digest after two blocks delay. In this case new authority set will be enacted and aux entry will be removed"));
-
-        let mut next_header = create_next_header(next_header.clone());
-        // We don't need cloned digest
-        next_header.digest.logs.clear();
-        let encoded_data =
-            assert_successful_header_ingestion(encoded_data, next_header.clone(), None, 1);
+        let mut fifth_header = create_next_header(fourth_header.clone());
+        let commit = create_justification_commit(1, 1, vec![fifth_header.clone()], &first_peers);
+        let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
+            round: 1,
+            commit,
+            votes_ancestries: vec![],
+        };
+        let encoded_data = assert_successful_header_ingestion(
+            encoded_data,
+            fifth_header.clone(),
+            Some(grandpa_justification.encode()),
+            1,
+        );
 
         // new change still same
         assert_next_change_in_authority(encoded_data.clone(), &new_change, 1);
@@ -683,15 +737,11 @@ mod tests {
         // Last authority set had set_id of 0
         // so while ingesting new authority set it
         // was incremented by 1.
-        assert_authority_set(
-            encoded_data.clone(),
-            &LightAuthoritySet::new(1, change.next_authorities.clone()),
-            1,
-        );
+        assert_authority_set(encoded_data.clone(), &first_authority_set, 1);
 
-        let next_header = create_next_header(next_header.clone());
+        let sixth_header = create_next_header(fifth_header.clone());
         let encoded_data =
-            assert_successful_header_ingestion(encoded_data, next_header.clone(), None, 1);
+            assert_successful_header_ingestion(encoded_data, sixth_header.clone(), None, 1);
 
         write_test_flow(format!(
             "\n\nNow NextChangeInAuthority should be removed from db and authority set is changed"
@@ -704,11 +754,7 @@ mod tests {
         // Last authority set had set_id of 1
         // so while ingesting new authority set it
         // was incremented by 1.
-        assert_authority_set(
-            encoded_data.clone(),
-            &LightAuthoritySet::new(2, new_change.next_authorities.clone()),
-            1,
-        );
+        assert_authority_set(encoded_data.clone(), &second_authority_set, 1);
     }
 
     fn make_ids(keys: &[Ed25519Keyring]) -> AuthorityList {
@@ -737,12 +783,14 @@ mod tests {
             let mut encoded_msg: Vec<u8> = Vec::new();
             encoded_msg.clear();
             (&msg, round, set_id).encode_to(&mut encoded_msg);
-            let signature = peers[0].sign(&encoded_msg[..]).into();
-            precommits.push(SignedPrecommit {
-                precommit,
-                signature,
-                id: peers[0].public().into(),
-            });
+            for peer in peers {
+                let signature = peer.sign(&encoded_msg[..]).into();
+                precommits.push(SignedPrecommit {
+                    precommit: precommit.clone(),
+                    signature,
+                    id: peer.public().into(),
+                });
+            }
         }
 
         Commit::<Block> {
