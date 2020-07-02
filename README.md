@@ -1,4 +1,4 @@
-# substrate-client
+# Substrate light client
 Implementation of substrate light client in rust compilable to wasm. It is written to be integrated with CosmWasm readily, and is optimized to run in a constrained environment of a smart contract.
 
 ## Compilation
@@ -22,7 +22,7 @@ Test tool is a bash script that run two tests with `-- --nocapture` flag, which 
 chmod +x test-tool.sh
 ./test-tool.sh
 ```
-### Upload optimized wasm bytecode in CosmWasm enabled blockchain
+## Upload optimized wasm bytecode in CosmWasm enabled blockchain
 ```commandline
 wasmcli tx wasm store substrate_client.wasm --from john_doe --gas 1700000  -y
 ```
