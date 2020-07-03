@@ -1,25 +1,5 @@
-// Copyright 2018-2020 Parity Technologies (UK) Ltd.
-// This file is part of Substrate.
-
-// Substrate is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// Substrate is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with Substrate.  If not, see <http://www.gnu.org/licenses/>.
-
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
-use crate::common::traits::header_backend::HeaderBackend;
-use crate::common::types::blockchain_error::BlockchainError;
-use crate::common::types::blockchain_result::BlockchainResult;
 use finality_grandpa::voter_set::VoterSet;
 use finality_grandpa::{BlockNumberOps, Error as GrandpaError};
 use parity_scale_codec::{Decode, Encode};
@@ -27,26 +7,19 @@ use sp_core::crypto::Pair;
 use sp_finality_grandpa::{
     AuthorityId, AuthorityPair, AuthoritySignature, RoundNumber, SetId as SetIdNumber,
 };
-use sp_runtime::generic::BlockId;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 use sp_runtime::Justification;
-use std::io;
+
+use crate::common::types::blockchain_error::BlockchainError;
+use crate::common::types::blockchain_result::BlockchainResult;
 
 /// Errors that can occur while voting in GRANDPA.
 #[derive(Debug)]
 pub enum Error {
     /// An error within grandpa.
     Grandpa(GrandpaError),
-    /// A network error.
-    Network(String),
-    /// A blockchain error.
-    Blockchain(String),
     /// Could not complete a round on disk.
     Client(BlockchainError),
-    /// An invariant has been violated (e.g. not finalizing pending change blocks in-order)
-    Safety(String),
-    /// A timer failed to fire.
-    Timer(io::Error),
 }
 
 impl From<GrandpaError> for Error {
@@ -124,17 +97,6 @@ pub fn check_message_sig_with_buffer<Block: BlockT>(
     }
 }
 
-/// Encode round message localized to a given round and set id.
-pub(crate) fn localized_payload<E: Encode>(
-    round: RoundNumber,
-    set_id: SetIdNumber,
-    message: &E,
-) -> Vec<u8> {
-    let mut buf = Vec::new();
-    localized_payload_with_buffer(round, set_id, message, &mut buf);
-    buf
-}
-
 /// Encode round message localized to a given round and set id using the given
 /// buffer. The given buffer will be cleared and the resulting encoded payload
 /// will always be written to the start of the buffer.
@@ -172,55 +134,6 @@ pub struct GrandpaJustification<Block: BlockT> {
 }
 
 impl<Block: BlockT> GrandpaJustification<Block> {
-    /// Create a GRANDPA justification from the given commit. This method
-    /// assumes the commit is valid and well-formed.
-    pub fn from_commit<C>(
-        client: &Arc<C>,
-        round: u64,
-        commit: Commit<Block>,
-    ) -> Result<GrandpaJustification<Block>, Error>
-    where
-        C: HeaderBackend<Block>,
-    {
-        let mut votes_ancestries_hashes = HashSet::new();
-        let mut votes_ancestries = Vec::new();
-
-        let error = || {
-            let msg = "invalid precommits for target commit".to_string();
-            Err(Error::Client(BlockchainError::BadJustification(msg)))
-        };
-
-        for signed in commit.precommits.iter() {
-            let mut current_hash = signed.precommit.target_hash.clone();
-            loop {
-                if current_hash == commit.target_hash {
-                    break;
-                }
-
-                match client.header(BlockId::Hash(current_hash))? {
-                    Some(current_header) => {
-                        if *current_header.number() <= commit.target_number {
-                            return error();
-                        }
-
-                        let parent_hash = current_header.parent_hash().clone();
-                        if votes_ancestries_hashes.insert(current_hash) {
-                            votes_ancestries.push(current_header);
-                        }
-                        current_hash = parent_hash;
-                    }
-                    _ => return error(),
-                }
-            }
-        }
-
-        Ok(GrandpaJustification {
-            round,
-            commit,
-            votes_ancestries,
-        })
-    }
-
     /// Validate the commit and the votes'
     /// ancestry proofs finalize the given block.
     pub fn verify_finalization(
