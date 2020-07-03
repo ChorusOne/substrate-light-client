@@ -51,18 +51,6 @@ pub trait ProvableJustification<Block: BlockT>: Encode + Decode {
         authorities: &[(AuthorityId, u64)],
     ) -> BlockchainResult<()>;
 
-    /// Decode and verify justification.
-    fn decode_and_verify(
-        justification: &Justification,
-        set_id: u64,
-        authorities: &[(AuthorityId, u64)],
-    ) -> BlockchainResult<Self> {
-        let justification = Self::decode(&mut &**justification)
-            .map_err(|_| BlockchainError::JustificationDecode)?;
-        justification.verify(set_id, authorities)?;
-        Ok(justification)
-    }
-
     fn decode_and_verify_finalization(
         justification: &Justification,
         set_id: u64,
