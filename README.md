@@ -1,5 +1,5 @@
 # Substrate light client
-Implementation of substrate light client in rust compilable to wasm. It is written to be integrated with CosmWasm readily, and is optimized to run in a constrained environment of a smart contract.
+Implementation of substrate light client in rust compilable to wasm. It is written to be integrated with CosmWasm readily, and is optimized to run in a constrained environment of a smart contract. Refer [here](#how-it-works) to know how it works under the hood.
 
 ## Compilation
 
@@ -26,3 +26,9 @@ chmod +x test-tool.sh
 ```commandline
 wasmcli tx wasm store substrate_client.wasm --from john_doe --gas 1700000  -y
 ```
+
+## How it works?
+Light client has three entrypoints:
+1. Initialization method: As the name suggests, initialization method initialize new light client instance. It requires a root header and grandpa authority set who signed that header along with some configuration parameters.
+2. Header ingestion method: Header ingestion method first validates incoming header (optionally with justification). Header validation contains mainly two checks: a. Header is child of the last header we successfully ingested b. If justification is provided it is valid and its target hash is equal to header's hash. Upon successful validation, if a scheduled authority set change is contained in the header, it is extracted and stored along with the header. Lastly, if valid justification is provided, the header and its ascendants are marked as finalized.
+3. Light client status method: Status method is a read-only method which reads light client storage and returns data like: last ingested header, last finalized header etc.
