@@ -126,14 +126,14 @@ mod tests {
     };
     use sp_keyring::ed25519::Keyring;
     use sp_keyring::Ed25519Keyring;
-    use sp_runtime::traits::{Header as HeaderT, NumberFor, One};
+    use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor, One};
     use sp_runtime::{DigestItem, Justification};
     use std::io::Write;
     use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
     type PrintLevel = i32;
 
-    fn write_with_print_level(stream: &mut StandardStream, print_level: PrintLevel, text: String) {
+    fn write_with_print_level(stream: &mut StandardStream, _print_level: PrintLevel, text: String) {
         let mut print_str = String::new();
         // TODO: Enable print levels later on
         print_str.push_str(text.as_str());
@@ -607,8 +607,6 @@ mod tests {
             GRANDPA_ENGINE_ID,
             sp_finality_grandpa::ConsensusLog::ScheduledChange(new_change.clone()).encode(),
         ));
-        let fifth_header = create_next_header(fourth_header.clone());
-        let sixth_header = create_next_header(fifth_header.clone());
 
         write_test_flow(format!(
             "\n\nPushing scheduled change with next header and verifying data."
@@ -716,7 +714,7 @@ mod tests {
         // In this case new authority set will be enacted and aux entry will be removed
 
         write_test_flow(format!("\n\nNow, a scenario where scheduled change isn't part of digest after two blocks delay. In this case new authority set will be enacted and aux entry will be removed"));
-        let mut fifth_header = create_next_header(fourth_header.clone());
+        let fifth_header = create_next_header(fourth_header.clone());
         let commit = create_justification_commit(1, 1, vec![fifth_header.clone()], &first_peers);
         let grandpa_justification: GrandpaJustification<Block> = GrandpaJustification {
             round: 1,
@@ -807,24 +805,39 @@ mod tests {
         let voters = make_ids(peers);
         write_test_flow(format!("Creating initial authority set with one voter"));
         let genesis_authority_set = LightAuthoritySet::new(0, voters);
+        write_test_flow(serde_json::to_string(&genesis_authority_set.authorities()).unwrap());
 
         write_test_flow(format!("\n\nInitializing database"));
         let (encoded_data, initial_header) =
             assert_successful_db_init(Some(genesis_authority_set.clone()), 1);
+        let initial_block = Block::new(initial_header.clone(), vec![]);
+        write_test_flow(serde_json::to_string(&initial_block).unwrap());
         let first_header = create_next_header(initial_header.clone());
+        let first_block = Block::new(first_header.clone(), vec![]);
+        write_test_flow(serde_json::to_string(&first_block).unwrap());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, first_header.clone(), None, 1);
 
         // Now we will try to ingest a block with justification
         let second_header = create_next_header(first_header.clone());
+        let second_block = Block::new(second_header.clone(), vec![]);
+        write_test_flow(serde_json::to_string(&second_block).unwrap());
 
         let third_header = create_next_header(second_header.clone());
+        let third_block = Block::new(third_header.clone(), vec![]);
+        write_test_flow(serde_json::to_string(&third_block).unwrap());
 
         let fourth_header = create_next_header(third_header.clone());
+        let fourth_block = Block::new(fourth_header.clone(), vec![]);
+        write_test_flow(serde_json::to_string(&fourth_block).unwrap());
 
         let fifth_header = create_next_header(fourth_header.clone());
+        let fifth_block = Block::new(fifth_header.clone(), vec![]);
+        write_test_flow(serde_json::to_string(&fifth_block).unwrap());
 
         let sixth_header = create_next_header(fifth_header.clone());
+        let sixth_block = Block::new(sixth_header.clone(), vec![]);
+        write_test_flow(serde_json::to_string(&sixth_block).unwrap());
 
         let header_ancestry = vec![
             second_header.clone(),
@@ -841,6 +854,7 @@ mod tests {
         };
 
         let justification = Some(grandpa_justification.encode());
+        write_test_flow(serde_json::to_string(&justification).unwrap());
 
         write_test_flow(format!("\n\nCreated justification for Second header"));
         write_test_flow(format!(
@@ -879,6 +893,7 @@ mod tests {
         };
 
         let justification = Some(grandpa_justification.encode());
+        write_test_flow(serde_json::to_string(&justification).unwrap());
         write_test_flow(format!("\n\nCreated justification for fifth header"));
         write_test_flow(format!(
             "Now we will try to ingest fifth header with justification"

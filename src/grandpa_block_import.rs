@@ -164,7 +164,7 @@ where
 fn do_finalize_block<C, Block: BlockT>(
     client: C,
     hash: Block::Hash,
-    number: NumberFor<Block>,
+    _number: NumberFor<Block>,
     justification: Justification,
 ) -> Result<ImportResult, ConsensusError>
 where
