@@ -1,7 +1,7 @@
 // Unused code and unimplemented trait methods are useful in
 // the next phase of development, so we have decided to keep
 // them there. So, instead of litter code with dead-code warning
-// suppress instruction, we have put one at the project level.
+// suppress instruction, we have put one at the crate level.
 // Once phase 2 is complete, this will be removed.
 #![allow(dead_code)]
 
