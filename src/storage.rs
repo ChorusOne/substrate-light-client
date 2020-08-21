@@ -393,7 +393,7 @@ where
     }
 
     /// Set an existing block as new best block.
-    fn set_head(&self, block: BlockId<Block>) -> BlockchainResult<()> {
+    fn set_head(&self, _block: BlockId<Block>) -> BlockchainResult<()> {
         unimplemented!()
     }
 

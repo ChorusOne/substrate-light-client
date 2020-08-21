@@ -358,7 +358,7 @@ where
     fn finalize_block(
         &self,
         id: BlockId<Block>,
-        justification: Option<Vec<u8>>,
+        _justification: Option<Vec<u8>>,
     ) -> BlockchainResult<()> {
         let possible_to_be_finalized_block = self.storage.header(id)?;
         if possible_to_be_finalized_block.is_none() {

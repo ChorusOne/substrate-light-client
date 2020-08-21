@@ -50,10 +50,10 @@ where
 {
     fn verify(
         &mut self,
-        origin: BlockOrigin,
+        _origin: BlockOrigin,
         header: <Block as BlockT>::Header,
         justification: Option<Vec<u8>>,
-        body: Option<Vec<<Block as BlockT>::Extrinsic>>,
+        _body: Option<Vec<<Block as BlockT>::Extrinsic>>,
     ) -> Result<BlockImportParams<Block>, String> {
         let (possible_authority_change, scheduled_change_exists) = {
             let possible_authority_change =
@@ -109,7 +109,6 @@ where
         }
 
         if let Some(authority_change) = possible_authority_change {
-            let info = self.storage.info();
             let possible_current_authority_set =
                 fetch_light_authority_set(self.storage.clone()).map_err(|e| format!("{}", e))?;
             let current_authority_set = if possible_current_authority_set.is_none() {

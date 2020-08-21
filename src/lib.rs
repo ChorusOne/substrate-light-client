@@ -1,3 +1,8 @@
+// Unused code and unimplemented trait methods are useful in
+// the next phase of development, so we have decided to keep
+// them there.
+#![allow(dead_code)]
+
 mod block_import_wrapper;
 mod block_processor;
 mod client;
