@@ -813,31 +813,19 @@ mod tests {
         let initial_block = Block::new(initial_header.clone(), vec![]);
         write_test_flow(serde_json::to_string(&initial_block).unwrap());
         let first_header = create_next_header(initial_header.clone());
-        let first_block = Block::new(first_header.clone(), vec![]);
-        write_test_flow(serde_json::to_string(&first_block).unwrap());
         let encoded_data =
             assert_successful_header_ingestion(encoded_data, first_header.clone(), None, 1);
 
         // Now we will try to ingest a block with justification
         let second_header = create_next_header(first_header.clone());
-        let second_block = Block::new(second_header.clone(), vec![]);
-        write_test_flow(serde_json::to_string(&second_block).unwrap());
 
         let third_header = create_next_header(second_header.clone());
-        let third_block = Block::new(third_header.clone(), vec![]);
-        write_test_flow(serde_json::to_string(&third_block).unwrap());
 
         let fourth_header = create_next_header(third_header.clone());
-        let fourth_block = Block::new(fourth_header.clone(), vec![]);
-        write_test_flow(serde_json::to_string(&fourth_block).unwrap());
 
         let fifth_header = create_next_header(fourth_header.clone());
-        let fifth_block = Block::new(fifth_header.clone(), vec![]);
-        write_test_flow(serde_json::to_string(&fifth_block).unwrap());
 
         let sixth_header = create_next_header(fifth_header.clone());
-        let sixth_block = Block::new(sixth_header.clone(), vec![]);
-        write_test_flow(serde_json::to_string(&sixth_block).unwrap());
 
         let header_ancestry = vec![
             second_header.clone(),
@@ -854,7 +842,6 @@ mod tests {
         };
 
         let justification = Some(grandpa_justification.encode());
-        write_test_flow(serde_json::to_string(&justification).unwrap());
 
         write_test_flow(format!("\n\nCreated justification for Second header"));
         write_test_flow(format!(
@@ -893,7 +880,6 @@ mod tests {
         };
 
         let justification = Some(grandpa_justification.encode());
-        write_test_flow(serde_json::to_string(&justification).unwrap());
         write_test_flow(format!("\n\nCreated justification for fifth header"));
         write_test_flow(format!(
             "Now we will try to ingest fifth header with justification"
