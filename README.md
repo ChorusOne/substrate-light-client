@@ -24,7 +24,7 @@ chmod +x test-tool.sh
 ```
 
 ## Upload optimized wasm bytecode
-Setup CosmWasm enabled `Gaia` from [here](https://github.com/ChorusOne/gaia/tree/41eb8accd684aeea680d406da9126c9721f24a2c), and run following command in project directory.
+Setup CosmWasm enabled `Gaia` from [here](https://github.com/ChorusOne/gaia/tree/657a306b98cf646c3bf434f8e1ad2d0b94ab8e9f), and run following command in project directory.
 ```commandline
 make wasm-optimized
 gaiacli tx ibc wasm store "target/wasm32-unknown-unknown/release/substrate_client.wasm"  --gas=2000000  --from=<account with $ for gas> --chain-id "<your chain id>" --yes
