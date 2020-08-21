@@ -1,6 +1,8 @@
 // Unused code and unimplemented trait methods are useful in
 // the next phase of development, so we have decided to keep
-// them there.
+// them there. So, instead of litter code with dead-code warning
+// suppress instruction, we put one at the project level.
+// Once phase 2 is complete, this will be removed.
 #![allow(dead_code)]
 
 mod block_import_wrapper;
