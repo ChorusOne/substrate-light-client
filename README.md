@@ -22,9 +22,12 @@ Test tool is a bash script that run two tests with `-- --nocapture` flag, which 
 chmod +x test-tool.sh
 ./test-tool.sh
 ```
-## Upload optimized wasm bytecode in CosmWasm enabled blockchain
+
+## Upload optimized wasm bytecode
+Setup CosmWasm enabled `Gaia` from [here](https://github.com/ChorusOne/gaia/tree/41eb8accd684aeea680d406da9126c9721f24a2c), and run following command in project directory.
 ```commandline
-wasmcli tx wasm store substrate_client.wasm --from john_doe --gas 1700000  -y
+make wasm-optimized
+gaiacli tx ibc wasm store "target/wasm32-unknown-unknown/release/substrate_client.wasm"  --gas=2000000  --from=<account with $ for gas> --chain-id "<your chain id>" --yes
 ```
 
 ## How it works?
