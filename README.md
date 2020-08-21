@@ -23,8 +23,10 @@ chmod +x test-tool.sh
 ./test-tool.sh
 ```
 
-## Run client inside Cosmos blockchain
-First we need to build optimized version by running `make wasm-optimized`, then follow instruction from [here](https://github.com/ChorusOne/gaia/blob/657a306b98cf646c3bf434f8e1ad2d0b94ab8e9f/README.md) to upload it to gaia daemon and start gaia LCD.
+## Run it inside Cosmos blockchain
+Before we start, we need to build wasm optimized byte code for this light client via running `make wasm-optimized`.
+
+To run it inside Cosmos blockchain, we need modified version of `Gaia` with CosmWasm enabled. For that, you can clone this [repository](https://github.com/ChorusOne/gaia), and switch to `wasm-ibc` branch. Then follow instruction from README file to upload it to gaia daemon and start gaia LCD.
 
 ## How it works?
 Light client is in form of CosmWasm contract, with three entry points: 
