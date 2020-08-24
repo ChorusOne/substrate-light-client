@@ -29,6 +29,12 @@ Before we start, we need to build wasm optimized byte code for this light client
 To run it inside Cosmos blockchain, we need modified version of `Gaia` with CosmWasm enabled. For that, you can clone this [repository](https://github.com/ChorusOne/gaia), and switch to `wasm-ibc` branch. Then follow instruction from README file to upload it to gaia daemon and start gaia LCD.
 
 ## How it works?
+At a higher level, substrate light client follows the sequence of grandpa finalized headers and keeps track of the following things:
+1. Best header seen till now: Refers to the last header we successfully ingested.
+2. Last finalized header: Last header for which we received a valid grandpa justification
+3. Scheduled Grandpa Authority Set Change: It refers to the change of authority set after a delay of certain blocks. It is extracted from `ScheduledChange` consensus log from the incoming header and kept in the storage till the authority set change is applied to the current authority set.
+4. Current Grandpa Authority set: Grandpa authority set after last authority set change was applied. It is used to validate grandpa justification.
+
 Light client is in form of CosmWasm contract, with three entry points: 
 1. `init`: As the name suggests, init method initializes new light client instance. It requires a root header and grandpa authority set who signed that header along with some configuration parameters.
 2. `update`: update method ingests incoming header with optional justification. Header ingestion first validates incoming header (optionally with justification), and contains mainly two checks: a. Header is a child of the last header we successfully ingested b. If justification is provided, it is valid against current authority set and its target hash is equal to header's hash. Upon successful validation, if a scheduled authority set change is contained in the header, it is extracted and stored along with the header. Lastly, if valid justification is provided, the header and its ascendants are marked as finalized.
