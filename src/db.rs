@@ -63,7 +63,7 @@ impl KeyValueDB for DB {
         }
     }
 
-    fn write_buffered(&self, transaction: DBTransaction) {
+    fn write(&self, transaction: DBTransaction) -> io::Result<()> {
         let mut columns = self.columns.write();
         let ops = transaction.ops;
         for op in ops {
@@ -78,11 +78,13 @@ impl KeyValueDB for DB {
                         col.remove(&*key);
                     }
                 }
+                DBOp::DeletePrefix { col, prefix } => {
+                    if let Some(col) = columns.get_mut(&col) {
+                        col.remove(&*prefix);
+                    }
+                }
             }
         }
-    }
-
-    fn flush(&self) -> io::Result<()> {
         Ok(())
     }
 
@@ -98,7 +100,7 @@ impl KeyValueDB for DB {
         }
     }
 
-    fn iter_from_prefix<'a>(
+    fn iter_with_prefix<'a>(
         &'a self,
         col: u32,
         prefix: &'a [u8],
@@ -300,7 +302,7 @@ mod tests {
 
         let mut transaction = db.transaction();
         transaction.put(0, key1, b"horse");
-        db.write_buffered(transaction);
+        db.write(transaction)?;
         assert_eq!(&*db.get(0, key1)?.unwrap(), b"horse");
         Ok(())
     }
@@ -312,12 +314,12 @@ mod tests {
 
         let mut transaction = db.transaction();
         transaction.put(0, key1, b"horse");
-        db.write_buffered(transaction);
+        db.write(transaction)?;
         assert_eq!(&*db.get(0, key1)?.unwrap(), b"horse");
 
         let mut transaction = db.transaction();
         transaction.delete(0, key1);
-        db.write_buffered(transaction);
+        db.write(transaction)?;
         assert!(db.get(0, key1)?.is_none());
         Ok(())
     }
@@ -331,7 +333,7 @@ mod tests {
         let mut transaction = db.transaction();
         transaction.put(0, key1, key1);
         transaction.put(0, key2, key2);
-        db.write_buffered(transaction);
+        db.write(transaction)?;
 
         let contents: Vec<_> = db.iter(0).into_iter().collect();
         assert_eq!(contents.len(), 2);
@@ -358,7 +360,7 @@ mod tests {
         db.write(batch)?;
 
         // empty prefix
-        let contents: Vec<_> = db.iter_from_prefix(0, b"").into_iter().collect();
+        let contents: Vec<_> = db.iter_with_prefix(0, b"").into_iter().collect();
         assert_eq!(contents.len(), 4);
         assert_eq!(&*contents[0].0, key1);
         assert_eq!(&*contents[1].0, key2);
@@ -366,24 +368,24 @@ mod tests {
         assert_eq!(&*contents[3].0, key4);
 
         // prefix a
-        let contents: Vec<_> = db.iter_from_prefix(0, b"a").into_iter().collect();
+        let contents: Vec<_> = db.iter_with_prefix(0, b"a").into_iter().collect();
         assert_eq!(contents.len(), 3);
         assert_eq!(&*contents[0].0, key2);
         assert_eq!(&*contents[1].0, key3);
         assert_eq!(&*contents[2].0, key4);
 
         // prefix abc
-        let contents: Vec<_> = db.iter_from_prefix(0, b"abc").into_iter().collect();
+        let contents: Vec<_> = db.iter_with_prefix(0, b"abc").into_iter().collect();
         assert_eq!(contents.len(), 2);
         assert_eq!(&*contents[0].0, key3);
         assert_eq!(&*contents[1].0, key4);
 
         // prefix abcde
-        let contents: Vec<_> = db.iter_from_prefix(0, b"abcde").into_iter().collect();
+        let contents: Vec<_> = db.iter_with_prefix(0, b"abcde").into_iter().collect();
         assert_eq!(contents.len(), 0);
 
         // prefix 0
-        let contents: Vec<_> = db.iter_from_prefix(0, b"0").into_iter().collect();
+        let contents: Vec<_> = db.iter_with_prefix(0, b"0").into_iter().collect();
         assert_eq!(contents.len(), 1);
         assert_eq!(&*contents[0].0, key1);
         Ok(())
@@ -415,7 +417,7 @@ mod tests {
         assert_eq!(contents[1].0.to_vec(), key2.to_vec());
         assert_eq!(&*contents[1].1, b"dog");
 
-        let mut prefix_iter = db.iter_from_prefix(0, b"04c0");
+        let mut prefix_iter = db.iter_with_prefix(0, b"04c0");
         assert_eq!(*prefix_iter.next().unwrap().1, b"caterpillar"[..]);
         assert_eq!(*prefix_iter.next().unwrap().1, b"beef"[..]);
         assert_eq!(*prefix_iter.next().unwrap().1, b"fish"[..]);
@@ -443,11 +445,10 @@ mod tests {
         let mut transaction = db.transaction();
         transaction.put(0, key1, b"horse");
         transaction.delete(0, key3);
-        db.write_buffered(transaction);
+        db.write(transaction)?;
         assert!(db.get(0, key3)?.is_none());
         assert_eq!(&*db.get(0, key1)?.unwrap(), b"horse");
 
-        db.flush()?;
         assert!(db.get(0, key3)?.is_none());
         assert_eq!(&*db.get(0, key1)?.unwrap(), b"horse");
         Ok(())
